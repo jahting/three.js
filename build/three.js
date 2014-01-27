@@ -4,7 +4,7 @@
  * @author bhouston / http://exocortex.com
  */
 
-var THREE = { REVISION: '65' };
+var THREE = { REVISION: '66dev' };
 
 self.console = self.console || {
 
@@ -17858,6 +17858,8 @@ THREE.ShaderChunk = {
 
 			"mat4 boneMatX = getBoneMatrix( skinIndex.x );",
 			"mat4 boneMatY = getBoneMatrix( skinIndex.y );",
+			"mat4 boneMatZ = getBoneMatrix( skinIndex.z );",
+			"mat4 boneMatW = getBoneMatrix( skinIndex.w );",
 
 		"#endif"
 
@@ -17878,7 +17880,9 @@ THREE.ShaderChunk = {
 			"#endif",
 
 			"vec4 skinned  = boneMatX * skinVertex * skinWeight.x;",
-			"skinned 	  += boneMatY * skinVertex * skinWeight.y;",
+			"skinned      += boneMatY * skinVertex * skinWeight.y;",
+			"skinned      += boneMatZ * skinVertex * skinWeight.z;",
+			"skinned      += boneMatW * skinVertex * skinWeight.w;",
 
 		"#endif"
 
@@ -20049,17 +20053,17 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		this.setViewport();
+		this.setViewport( 0, 0, width, height );
 
 	};
 
 	this.setViewport = function ( x, y, width, height ) {
 
-		_viewportX = x !== undefined ? x * this.devicePixelRatio : 0;
-		_viewportY = y !== undefined ? y * this.devicePixelRatio : 0;
+		_viewportX = x * this.devicePixelRatio;
+		_viewportY = y * this.devicePixelRatio;
 
-		_viewportWidth = width !== undefined ? width * this.devicePixelRatio : _canvas.width;
-		_viewportHeight = height !== undefined ? height * this.devicePixelRatio : _canvas.height;
+		_viewportWidth = width * this.devicePixelRatio;
+		_viewportHeight = height * this.devicePixelRatio;
 
 		_gl.viewport( _viewportX, _viewportY, _viewportWidth, _viewportHeight );
 
@@ -20067,13 +20071,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.setScissor = function ( x, y, width, height ) {
 
-		var sX = x !== undefined ? x * this.devicePixelRatio : 0;
-		var sY = y !== undefined ? y * this.devicePixelRatio : 0;
-
-		var sW = width !== undefined ? width * this.devicePixelRatio : _canvas.width;
-		var sH = height !== undefined ? height * this.devicePixelRatio : _canvas.height;
-
-		_gl.scissor( sX, sY, sW, sH );
+		_gl.scissor(
+			x * this.devicePixelRatio,
+			y * this.devicePixelRatio,
+			width * this.devicePixelRatio,
+			height * this.devicePixelRatio
+		);
 
 	};
 
@@ -29490,291 +29493,6 @@ THREE.Shape.prototype.extractAllSpacedPoints = function ( divisions ) {
 
 THREE.Shape.Utils = {
 
-	/*
-		contour - array of vector2 for contour
-		holes   - array of array of vector2
-	*/
-
-	removeHoles: function ( contour, holes ) {
-
-		var shape = contour.concat(); // work on this shape
-		var allpoints = shape.concat();
-
-		/* For each isolated shape, find the closest points and break to the hole to allow triangulation */
-
-
-		var prevShapeVert, nextShapeVert,
-			prevHoleVert, nextHoleVert,
-			holeIndex, shapeIndex,
-			shapeId, shapeGroup,
-			h, h2,
-			hole, shortest, d,
-			p, pts1, pts2,
-			tmpShape1, tmpShape2,
-			tmpHole1, tmpHole2,
-			verts = [];
-
-		for ( h = 0; h < holes.length; h ++ ) {
-
-			hole = holes[ h ];
-
-			/*
-			shapeholes[ h ].concat(); // preserves original
-			holes.push( hole );
-			*/
-
-			Array.prototype.push.apply( allpoints, hole );
-
-			shortest = Number.POSITIVE_INFINITY;
-
-
-			// Find the shortest pair of pts between shape and hole
-
-			// Note: Actually, I'm not sure now if we could optimize this to be faster than O(m*n)
-			// Using distanceToSquared() intead of distanceTo() should speed a little
-			// since running square roots operations are reduced.
-
-			for ( h2 = 0; h2 < hole.length; h2 ++ ) {
-
-				pts1 = hole[ h2 ];
-				var dist = [];
-
-				for ( p = 0; p < shape.length; p++ ) {
-
-					pts2 = shape[ p ];
-					d = pts1.distanceToSquared( pts2 );
-					dist.push( d );
-
-					if ( d < shortest ) {
-
-						shortest = d;
-						holeIndex = h2;
-						shapeIndex = p;
-
-					}
-
-				}
-
-			}
-
-			//console.log("shortest", shortest, dist);
-
-			prevShapeVert = ( shapeIndex - 1 ) >= 0 ? shapeIndex - 1 : shape.length - 1;
-			prevHoleVert = ( holeIndex - 1 ) >= 0 ? holeIndex - 1 : hole.length - 1;
-
-			var areaapts = [
-
-				hole[ holeIndex ],
-				shape[ shapeIndex ],
-				shape[ prevShapeVert ]
-
-			];
-
-			var areaa = THREE.FontUtils.Triangulate.area( areaapts );
-
-			var areabpts = [
-
-				hole[ holeIndex ],
-				hole[ prevHoleVert ],
-				shape[ shapeIndex ]
-
-			];
-
-			var areab = THREE.FontUtils.Triangulate.area( areabpts );
-
-			var shapeOffset = 1;
-			var holeOffset = -1;
-
-			var oldShapeIndex = shapeIndex, oldHoleIndex = holeIndex;
-			shapeIndex += shapeOffset;
-			holeIndex += holeOffset;
-
-			if ( shapeIndex < 0 ) { shapeIndex += shape.length;  }
-			shapeIndex %= shape.length;
-
-			if ( holeIndex < 0 ) { holeIndex += hole.length;  }
-			holeIndex %= hole.length;
-
-			prevShapeVert = ( shapeIndex - 1 ) >= 0 ? shapeIndex - 1 : shape.length - 1;
-			prevHoleVert = ( holeIndex - 1 ) >= 0 ? holeIndex - 1 : hole.length - 1;
-
-			areaapts = [
-
-				hole[ holeIndex ],
-				shape[ shapeIndex ],
-				shape[ prevShapeVert ]
-
-			];
-
-			var areaa2 = THREE.FontUtils.Triangulate.area( areaapts );
-
-			areabpts = [
-
-				hole[ holeIndex ],
-				hole[ prevHoleVert ],
-				shape[ shapeIndex ]
-
-			];
-
-			var areab2 = THREE.FontUtils.Triangulate.area( areabpts );
-			//console.log(areaa,areab ,areaa2,areab2, ( areaa + areab ),  ( areaa2 + areab2 ));
-
-			if ( ( areaa + areab ) > ( areaa2 + areab2 ) ) {
-
-				// In case areas are not correct.
-				//console.log("USE THIS");
-
-				shapeIndex = oldShapeIndex;
-				holeIndex = oldHoleIndex ;
-
-				if ( shapeIndex < 0 ) { shapeIndex += shape.length;  }
-				shapeIndex %= shape.length;
-
-				if ( holeIndex < 0 ) { holeIndex += hole.length;  }
-				holeIndex %= hole.length;
-
-				prevShapeVert = ( shapeIndex - 1 ) >= 0 ? shapeIndex - 1 : shape.length - 1;
-				prevHoleVert = ( holeIndex - 1 ) >= 0 ? holeIndex - 1 : hole.length - 1;
-
-			} else {
-
-				//console.log("USE THAT ")
-
-			}
-
-			tmpShape1 = shape.slice( 0, shapeIndex );
-			tmpShape2 = shape.slice( shapeIndex );
-			tmpHole1 = hole.slice( holeIndex );
-			tmpHole2 = hole.slice( 0, holeIndex );
-
-			// Should check orders here again?
-
-			var trianglea = [
-
-				hole[ holeIndex ],
-				shape[ shapeIndex ],
-				shape[ prevShapeVert ]
-
-			];
-
-			var triangleb = [
-
-				hole[ holeIndex ] ,
-				hole[ prevHoleVert ],
-				shape[ shapeIndex ]
-
-			];
-
-			verts.push( trianglea );
-			verts.push( triangleb );
-
-			shape = tmpShape1.concat( tmpHole1 ).concat( tmpHole2 ).concat( tmpShape2 );
-
-		}
-
-		return {
-
-			shape:shape, 		/* shape with no holes */
-			isolatedPts: verts, /* isolated faces */
-			allpoints: allpoints
-
-		}
-
-
-	},
-
-	triangulateShape_OLD: function ( contour, holes ) {
-
-		var shapeWithoutHoles = THREE.Shape.Utils.removeHoles( contour, holes );
-
-		var shape = shapeWithoutHoles.shape,
-			allpoints = shapeWithoutHoles.allpoints,
-			isolatedPts = shapeWithoutHoles.isolatedPts;
-
-		var triangles = THREE.FontUtils.Triangulate( shape, false ); // True returns indices for points of spooled shape
-
-		// To maintain reference to old shape, one must match coordinates, or offset the indices from original arrays. It's probably easier to do the first.
-
-		//console.log( "triangles",triangles, triangles.length );
-		//console.log( "allpoints",allpoints, allpoints.length );
-
-		var i, il, f, face,
-			key, index,
-			allPointsMap = {},
-			isolatedPointsMap = {};
-
-		// prepare all points map
-
-		for ( i = 0, il = allpoints.length; i < il; i ++ ) {
-
-			key = allpoints[ i ].x + ":" + allpoints[ i ].y;
-
-			if ( allPointsMap[ key ] !== undefined ) {
-
-				console.log( "Duplicate point", key );
-
-			}
-
-			allPointsMap[ key ] = i;
-
-		}
-
-		// check all face vertices against all points map
-
-		for ( i = 0, il = triangles.length; i < il; i ++ ) {
-
-			face = triangles[ i ];
-
-			for ( f = 0; f < 3; f ++ ) {
-
-				key = face[ f ].x + ":" + face[ f ].y;
-
-				index = allPointsMap[ key ];
-
-				if ( index !== undefined ) {
-
-					face[ f ] = index;
-
-				}
-
-			}
-
-		}
-
-		// check isolated points vertices against all points map
-
-		for ( i = 0, il = isolatedPts.length; i < il; i ++ ) {
-
-			face = isolatedPts[ i ];
-
-			for ( f = 0; f < 3; f ++ ) {
-
-				key = face[ f ].x + ":" + face[ f ].y;
-
-				index = allPointsMap[ key ];
-
-				if ( index !== undefined ) {
-
-					face[ f ] = index;
-
-				}
-
-			}
-
-		}
-
-		return triangles.concat( isolatedPts );
-
-	}, // end triangulate shapes
-
-	/*
-	 *		Modified Triangulation.
-	 *
-	 *		basically rewritten 'removeHoles':
-	 *		- doesn't cut out an area anymore, but slices from shape to hole by adding two edges
-	 *		  - ATTENTION: this requires small change to 'THREE.FontUtils.snip' to account for duplicate coordinates
-	 *		- checks whether such a cut line lies inside the shape doesn't intersect any other edge (shape and holes)
-	 */
 	triangulateShape: function ( contour, holes ) {
 
 		function point_in_segment_2D( inSegPt1, inSegPt2, inOtherPt ) {
@@ -30133,64 +29851,7 @@ THREE.Shape.Utils = {
 
 		return triangles.concat();
 
-	}, // end triangulate shapes
-
-	/*
-	triangulate2 : function( pts, holes ) {
-
-		// For use with Poly2Tri.js
-
-		var allpts = pts.concat();
-		var shape = [];
-		for (var p in pts) {
-			shape.push(new js.poly2tri.Point(pts[p].x, pts[p].y));
-		}
-
-		var swctx = new js.poly2tri.SweepContext(shape);
-
-		for (var h in holes) {
-			var aHole = holes[h];
-			var newHole = []
-			for (i in aHole) {
-				newHole.push(new js.poly2tri.Point(aHole[i].x, aHole[i].y));
-				allpts.push(aHole[i]);
-			}
-			swctx.AddHole(newHole);
-		}
-
-		var find;
-		var findIndexForPt = function (pt) {
-			find = new THREE.Vector2(pt.x, pt.y);
-			var p;
-			for (p=0, pl = allpts.length; p<pl; p++) {
-				if (allpts[p].equals(find)) return p;
-			}
-			return -1;
-		};
-
-		// triangulate
-		js.poly2tri.sweep.Triangulate(swctx);
-
-		var triangles =  swctx.GetTriangles();
-		var tr ;
-		var facesPts = [];
-		for (var t in triangles) {
-			tr =  triangles[t];
-			facesPts.push([
-				findIndexForPt(tr.GetPoint(0)),
-				findIndexForPt(tr.GetPoint(1)),
-				findIndexForPt(tr.GetPoint(2))
-					]);
-		}
-
-
-	//	console.log(facesPts);
-	//	console.log("triangles", triangles.length, triangles);
-
-		// Returns array of faces with 3 element each
-	return facesPts;
 	},
-*/
 
 	isClockWise: function ( pts ) {
 
