@@ -16,12 +16,6 @@ self.console = self.console || {
 
 };
 
-String.prototype.trim = String.prototype.trim || function () {
-
-	return this.replace( /^\s+|\s+$/g, '' );
-
-};
-
 // based on https://github.com/documentcloud/underscore/blob/bf657be243a075b5e72acc8a83e6f12a564d8f55/underscore.js#L767
 THREE.extend = function ( obj, source ) {
 
@@ -2119,13 +2113,14 @@ THREE.extend( THREE.Vector3.prototype, {
 
 	reflect: function () {
 
+		// reflect incident vector off plane orthogonal to normal
+		// normal is assumed to have unit length
+
 		var v1 = new THREE.Vector3();
 
-		return function ( vector ) {
+		return function ( normal ) {
 
-		    v1.copy( this ).projectOnVector( vector ).multiplyScalar( 2 );
-
-		    return this.subVectors( v1, this );
+			return this.sub( v1.copy( normal ).multiplyScalar( 2 * this.dot( normal ) ) );
 
 		}
 
@@ -11866,24 +11861,25 @@ THREE.ObjectLoader.prototype = {
 
 						break;
 
-					case 'CircleGeometry':
+					case 'BoxGeometry':
+					case 'CubeGeometry': // DEPRECATED
 
-						geometry = new THREE.CircleGeometry(
-							data.radius,
-							data.segments
-						);
-
-						break;
-
-					case 'CubeGeometry':
-
-						geometry = new THREE.CubeGeometry(
+						geometry = new THREE.BoxGeometry(
 							data.width,
 							data.height,
 							data.depth,
 							data.widthSegments,
 							data.heightSegments,
 							data.depthSegments
+						);
+
+						break;
+
+					case 'CircleGeometry':
+
+						geometry = new THREE.CircleGeometry(
+							data.radius,
+							data.segments
 						);
 
 						break;
@@ -12973,7 +12969,7 @@ THREE.SceneLoader.prototype = {
 
 			if ( geoJSON.type === "cube" ) {
 
-				geometry = new THREE.CubeGeometry( geoJSON.width, geoJSON.height, geoJSON.depth, geoJSON.widthSegments, geoJSON.heightSegments, geoJSON.depthSegments );
+				geometry = new THREE.BoxGeometry( geoJSON.width, geoJSON.height, geoJSON.depth, geoJSON.widthSegments, geoJSON.heightSegments, geoJSON.depthSegments );
 				geometry.name = geoID;
 				result.geometries[ geoID ] = geometry;
 
@@ -13978,7 +13974,6 @@ THREE.MeshPhongMaterial = function ( parameters ) {
 	this.shininess = 30;
 
 	this.metal = false;
-	this.perPixel = true;
 
 	this.wrapAround = false;
 	this.wrapRGB = new THREE.Vector3( 1, 1, 1 );
@@ -14034,7 +14029,6 @@ THREE.MeshPhongMaterial.prototype.clone = function () {
 	material.shininess = this.shininess;
 
 	material.metal = this.metal;
-	material.perPixel = this.perPixel;
 
 	material.wrapAround = this.wrapAround;
 	material.wrapRGB.copy( this.wrapRGB );
@@ -17430,28 +17424,6 @@ THREE.ShaderChunk = {
 
 	lights_phong_pars_vertex: [
 
-		"#ifndef PHONG_PER_PIXEL",
-
-		"#if MAX_POINT_LIGHTS > 0",
-
-			"uniform vec3 pointLightPosition[ MAX_POINT_LIGHTS ];",
-			"uniform float pointLightDistance[ MAX_POINT_LIGHTS ];",
-
-			"varying vec4 vPointLight[ MAX_POINT_LIGHTS ];",
-
-		"#endif",
-
-		"#if MAX_SPOT_LIGHTS > 0",
-
-			"uniform vec3 spotLightPosition[ MAX_SPOT_LIGHTS ];",
-			"uniform float spotLightDistance[ MAX_SPOT_LIGHTS ];",
-
-			"varying vec4 vSpotLight[ MAX_SPOT_LIGHTS ];",
-
-		"#endif",
-
-		"#endif",
-
 		"#if MAX_SPOT_LIGHTS > 0 || defined( USE_BUMPMAP )",
 
 			"varying vec3 vWorldPosition;",
@@ -17462,44 +17434,6 @@ THREE.ShaderChunk = {
 
 
 	lights_phong_vertex: [
-
-		"#ifndef PHONG_PER_PIXEL",
-
-		"#if MAX_POINT_LIGHTS > 0",
-
-			"for( int i = 0; i < MAX_POINT_LIGHTS; i ++ ) {",
-
-				"vec4 lPosition = viewMatrix * vec4( pointLightPosition[ i ], 1.0 );",
-				"vec3 lVector = lPosition.xyz - mvPosition.xyz;",
-
-				"float lDistance = 1.0;",
-				"if ( pointLightDistance[ i ] > 0.0 )",
-					"lDistance = 1.0 - min( ( length( lVector ) / pointLightDistance[ i ] ), 1.0 );",
-
-				"vPointLight[ i ] = vec4( lVector, lDistance );",
-
-			"}",
-
-		"#endif",
-
-		"#if MAX_SPOT_LIGHTS > 0",
-
-			"for( int i = 0; i < MAX_SPOT_LIGHTS; i ++ ) {",
-
-				"vec4 lPosition = viewMatrix * vec4( spotLightPosition[ i ], 1.0 );",
-				"vec3 lVector = lPosition.xyz - mvPosition.xyz;",
-
-				"float lDistance = 1.0;",
-				"if ( spotLightDistance[ i ] > 0.0 )",
-					"lDistance = 1.0 - min( ( length( lVector ) / spotLightDistance[ i ] ), 1.0 );",
-
-				"vSpotLight[ i ] = vec4( lVector, lDistance );",
-
-			"}",
-
-		"#endif",
-
-		"#endif",
 
 		"#if MAX_SPOT_LIGHTS > 0 || defined( USE_BUMPMAP )",
 
@@ -17532,16 +17466,8 @@ THREE.ShaderChunk = {
 
 			"uniform vec3 pointLightColor[ MAX_POINT_LIGHTS ];",
 
-			"#ifdef PHONG_PER_PIXEL",
-
-				"uniform vec3 pointLightPosition[ MAX_POINT_LIGHTS ];",
-				"uniform float pointLightDistance[ MAX_POINT_LIGHTS ];",
-
-			"#else",
-
-				"varying vec4 vPointLight[ MAX_POINT_LIGHTS ];",
-
-			"#endif",
+			"uniform vec3 pointLightPosition[ MAX_POINT_LIGHTS ];",
+			"uniform float pointLightDistance[ MAX_POINT_LIGHTS ];",
 
 		"#endif",
 
@@ -17553,15 +17479,7 @@ THREE.ShaderChunk = {
 			"uniform float spotLightAngleCos[ MAX_SPOT_LIGHTS ];",
 			"uniform float spotLightExponent[ MAX_SPOT_LIGHTS ];",
 
-			"#ifdef PHONG_PER_PIXEL",
-
-				"uniform float spotLightDistance[ MAX_SPOT_LIGHTS ];",
-
-			"#else",
-
-				"varying vec4 vSpotLight[ MAX_SPOT_LIGHTS ];",
-
-			"#endif",
+			"uniform float spotLightDistance[ MAX_SPOT_LIGHTS ];",
 
 		"#endif",
 
@@ -17610,23 +17528,14 @@ THREE.ShaderChunk = {
 
 			"for ( int i = 0; i < MAX_POINT_LIGHTS; i ++ ) {",
 
-				"#ifdef PHONG_PER_PIXEL",
+				"vec4 lPosition = viewMatrix * vec4( pointLightPosition[ i ], 1.0 );",
+				"vec3 lVector = lPosition.xyz + vViewPosition.xyz;",
 
-					"vec4 lPosition = viewMatrix * vec4( pointLightPosition[ i ], 1.0 );",
-					"vec3 lVector = lPosition.xyz + vViewPosition.xyz;",
+				"float lDistance = 1.0;",
+				"if ( pointLightDistance[ i ] > 0.0 )",
+					"lDistance = 1.0 - min( ( length( lVector ) / pointLightDistance[ i ] ), 1.0 );",
 
-					"float lDistance = 1.0;",
-					"if ( pointLightDistance[ i ] > 0.0 )",
-						"lDistance = 1.0 - min( ( length( lVector ) / pointLightDistance[ i ] ), 1.0 );",
-
-					"lVector = normalize( lVector );",
-
-				"#else",
-
-					"vec3 lVector = normalize( vPointLight[ i ].xyz );",
-					"float lDistance = vPointLight[ i ].w;",
-
-				"#endif",
+				"lVector = normalize( lVector );",
 
 				// diffuse
 
@@ -17671,23 +17580,14 @@ THREE.ShaderChunk = {
 
 			"for ( int i = 0; i < MAX_SPOT_LIGHTS; i ++ ) {",
 
-				"#ifdef PHONG_PER_PIXEL",
+				"vec4 lPosition = viewMatrix * vec4( spotLightPosition[ i ], 1.0 );",
+				"vec3 lVector = lPosition.xyz + vViewPosition.xyz;",
 
-					"vec4 lPosition = viewMatrix * vec4( spotLightPosition[ i ], 1.0 );",
-					"vec3 lVector = lPosition.xyz + vViewPosition.xyz;",
+				"float lDistance = 1.0;",
+				"if ( spotLightDistance[ i ] > 0.0 )",
+					"lDistance = 1.0 - min( ( length( lVector ) / spotLightDistance[ i ] ), 1.0 );",
 
-					"float lDistance = 1.0;",
-					"if ( spotLightDistance[ i ] > 0.0 )",
-						"lDistance = 1.0 - min( ( length( lVector ) / spotLightDistance[ i ] ), 1.0 );",
-
-					"lVector = normalize( lVector );",
-
-				"#else",
-
-					"vec3 lVector = normalize( vSpotLight[ i ].xyz );",
-					"float lDistance = vSpotLight[ i ].w;",
-
-				"#endif",
+				"lVector = normalize( lVector );",
 
 				"float spotEffect = dot( spotLightDirection[ i ], normalize( spotLightPosition[ i ] - vWorldPosition ) );",
 
@@ -19904,6 +19804,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	parameters = parameters || {};
 
 	var _canvas = parameters.canvas !== undefined ? parameters.canvas : document.createElement( 'canvas' ),
+	_context = parameters.context !== undefined ? parameters.context : null,
 
 	_precision = parameters.precision !== undefined ? parameters.precision : 'highp',
 
@@ -24103,7 +24004,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			alphaTest: material.alphaTest,
 			metal: material.metal,
-			perPixel: material.perPixel,
 			wrapAround: material.wrapAround,
 			doubleSided: material.side === THREE.DoubleSide,
 			flipSided: material.side === THREE.BackSide
@@ -25470,7 +25370,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			parameters.morphTargets ? "#define USE_MORPHTARGETS" : "",
 			parameters.morphNormals ? "#define USE_MORPHNORMALS" : "",
-			parameters.perPixel ? "#define PHONG_PER_PIXEL" : "",
 			parameters.wrapAround ? "#define WRAP_AROUND" : "",
 			parameters.doubleSided ? "#define DOUBLE_SIDED" : "",
 			parameters.flipSided ? "#define FLIP_SIDED" : "",
@@ -25569,7 +25468,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 			parameters.vertexColors ? "#define USE_COLOR" : "",
 
 			parameters.metal ? "#define METAL" : "",
-			parameters.perPixel ? "#define PHONG_PER_PIXEL" : "",
 			parameters.wrapAround ? "#define WRAP_AROUND" : "",
 			parameters.doubleSided ? "#define DOUBLE_SIDED" : "",
 			parameters.flipSided ? "#define FLIP_SIDED" : "",
@@ -25591,11 +25489,17 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_gl.attachShader( program, glVertexShader );
 		_gl.attachShader( program, glFragmentShader );
 
-		//Force a particular attribute to index 0.
+		// Force a particular attribute to index 0.
 		// because potentially expensive emulation is done by browser if attribute 0 is disabled.
-		//And, color, for example is often automatically bound to index 0 so disabling it
-		if ( index0AttributeName ) {
+		// And, color, for example is often automatically bound to index 0 so disabling it
+		if ( index0AttributeName !== undefined ) {
+
 			_gl.bindAttribLocation( program, 0, index0AttributeName );
+
+		} else {
+
+			_gl.bindAttribLocation( program, 0, 'position' );			
+
 		}
 
 		_gl.linkProgram( program );
@@ -26409,7 +26313,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 				preserveDrawingBuffer: _preserveDrawingBuffer
 			};
 
-			_gl = _canvas.getContext( 'webgl', attributes ) || _canvas.getContext( 'experimental-webgl', attributes );
+			_gl = _context || _canvas.getContext( 'webgl', attributes ) || _canvas.getContext( 'experimental-webgl', attributes );
 
 			if ( _gl === null ) {
 
@@ -31928,66 +31832,11 @@ THREE.CombinedCamera.prototype.toBottomView = function() {
 };
 
 /**
- * @author hughes
- */
-
-THREE.CircleGeometry = function ( radius, segments, thetaStart, thetaLength ) {
-
-	THREE.Geometry.call( this );
-
-	this.radius = radius = radius || 50;
-	this.segments = segments = segments !== undefined ? Math.max( 3, segments ) : 8;
-
-	this.thetaStart = thetaStart = thetaStart !== undefined ? thetaStart : 0;
-	this.thetaLength = thetaLength = thetaLength !== undefined ? thetaLength : Math.PI * 2;
-
-	var i, uvs = [],
-	center = new THREE.Vector3(), centerUV = new THREE.Vector2( 0.5, 0.5 );
-
-	this.vertices.push(center);
-	uvs.push( centerUV );
-
-	for ( i = 0; i <= segments; i ++ ) {
-
-		var vertex = new THREE.Vector3();
-		var segment = thetaStart + i / segments * thetaLength;
-
-		vertex.x = radius * Math.cos( segment );
-		vertex.y = radius * Math.sin( segment );
-
-		this.vertices.push( vertex );
-		uvs.push( new THREE.Vector2( ( vertex.x / radius + 1 ) / 2, ( vertex.y / radius + 1 ) / 2 ) );
-
-	}
-
-	var n = new THREE.Vector3( 0, 0, 1 );
-
-	for ( i = 1; i <= segments; i ++ ) {
-
-		var v1 = i;
-		var v2 = i + 1 ;
-		var v3 = 0;
-
-		this.faces.push( new THREE.Face3( v1, v2, v3, [ n.clone(), n.clone(), n.clone() ] ) );
-		this.faceVertexUvs[ 0 ].push( [ uvs[ i ].clone(), uvs[ i + 1 ].clone(), centerUV.clone() ] );
-
-	}
-
-	this.computeCentroids();
-	this.computeFaceNormals();
-
-	this.boundingSphere = new THREE.Sphere( new THREE.Vector3(), radius );
-
-};
-
-THREE.CircleGeometry.prototype = Object.create( THREE.Geometry.prototype );
-
-/**
  * @author mrdoob / http://mrdoob.com/
  * based on http://papervision3d.googlecode.com/svn/trunk/as3/trunk/src/org/papervision3d/objects/primitives/Cube.as
  */
 
-THREE.CubeGeometry = function ( width, height, depth, widthSegments, heightSegments, depthSegments ) {
+THREE.BoxGeometry = function ( width, height, depth, widthSegments, heightSegments, depthSegments ) {
 
 	THREE.Geometry.call( this );
 
@@ -32101,7 +31950,66 @@ THREE.CubeGeometry = function ( width, height, depth, widthSegments, heightSegme
 
 };
 
-THREE.CubeGeometry.prototype = Object.create( THREE.Geometry.prototype );
+THREE.BoxGeometry.prototype = Object.create( THREE.Geometry.prototype );
+
+/**
+ * @author hughes
+ */
+
+THREE.CircleGeometry = function ( radius, segments, thetaStart, thetaLength ) {
+
+	THREE.Geometry.call( this );
+
+	this.radius = radius = radius || 50;
+	this.segments = segments = segments !== undefined ? Math.max( 3, segments ) : 8;
+
+	this.thetaStart = thetaStart = thetaStart !== undefined ? thetaStart : 0;
+	this.thetaLength = thetaLength = thetaLength !== undefined ? thetaLength : Math.PI * 2;
+
+	var i, uvs = [],
+	center = new THREE.Vector3(), centerUV = new THREE.Vector2( 0.5, 0.5 );
+
+	this.vertices.push(center);
+	uvs.push( centerUV );
+
+	for ( i = 0; i <= segments; i ++ ) {
+
+		var vertex = new THREE.Vector3();
+		var segment = thetaStart + i / segments * thetaLength;
+
+		vertex.x = radius * Math.cos( segment );
+		vertex.y = radius * Math.sin( segment );
+
+		this.vertices.push( vertex );
+		uvs.push( new THREE.Vector2( ( vertex.x / radius + 1 ) / 2, ( vertex.y / radius + 1 ) / 2 ) );
+
+	}
+
+	var n = new THREE.Vector3( 0, 0, 1 );
+
+	for ( i = 1; i <= segments; i ++ ) {
+
+		var v1 = i;
+		var v2 = i + 1 ;
+		var v3 = 0;
+
+		this.faces.push( new THREE.Face3( v1, v2, v3, [ n.clone(), n.clone(), n.clone() ] ) );
+		this.faceVertexUvs[ 0 ].push( [ uvs[ i ].clone(), uvs[ i + 1 ].clone(), centerUV.clone() ] );
+
+	}
+
+	this.computeCentroids();
+	this.computeFaceNormals();
+
+	this.boundingSphere = new THREE.Sphere( new THREE.Vector3(), radius );
+
+};
+
+THREE.CircleGeometry.prototype = Object.create( THREE.Geometry.prototype );
+
+// DEPRECATED
+
+THREE.CubeGeometry = THREE.BoxGeometry;
 
 /**
  * @author mrdoob / http://mrdoob.com/
@@ -34605,7 +34513,7 @@ THREE.BoundingBoxHelper = function ( object, hex ) {
 
 	this.box = new THREE.Box3();
 
-	THREE.Mesh.call( this, new THREE.CubeGeometry( 1, 1, 1 ), new THREE.MeshBasicMaterial( { color: color, wireframe: true } ) );
+	THREE.Mesh.call( this, new THREE.BoxGeometry( 1, 1, 1 ), new THREE.MeshBasicMaterial( { color: color, wireframe: true } ) );
 
 };
 
