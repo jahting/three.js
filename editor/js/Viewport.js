@@ -26,7 +26,7 @@ var Viewport = function ( editor ) {
 
 	//
 
-	var camera = new THREE.PerspectiveCamera( 50, container.dom.offsetWidth / container.dom.offsetHeight, 1, 5000 );
+	var camera = new THREE.PerspectiveCamera( 50, 1, 1, 5000 );
 	camera.position.fromArray( editor.config.getKey( 'camera' ).position );
 	camera.lookAt( new THREE.Vector3().fromArray( editor.config.getKey( 'camera' ).target ) );
 
@@ -43,7 +43,7 @@ var Viewport = function ( editor ) {
 
 		controls.enabled = true;
 
-		if ( transformControls.axis !== undefined ) {
+		if ( transformControls.axis !== null ) {
 
 			controls.enabled = false;
 
@@ -272,7 +272,8 @@ var Viewport = function ( editor ) {
 
 		if ( object !== null ) {
 
-			if ( object.geometry !== undefined ) {
+			if ( object.geometry !== undefined &&
+				 object instanceof THREE.Sprite === false ) {
 
 				selectionBox.update( object );
 				selectionBox.visible = true;
@@ -571,9 +572,12 @@ var Viewport = function ( editor ) {
 
 		renderer.clear();
 		renderer.render( scene, camera );
-		renderer.render( sceneHelpers, camera );
 
-		//console.trace();
+		if ( renderer instanceof THREE.RaytracingRenderer === false ) {
+
+			renderer.render( sceneHelpers, camera );
+
+		}
 
 	}
 

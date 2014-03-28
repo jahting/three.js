@@ -126,11 +126,12 @@
 				ensureLoop( sphereMesh.animation );
 				THREE.AnimationHandler.add( sphereMesh.animation );
 												
-				var sphereMeshAnimation = new THREE.Animation( sphereMesh, sphereMesh.animation.name, THREE.AnimationHandler.LINEAR )
-				sphereMeshAnimation.play( true, 0 );
+				var sphereMeshAnimation = new THREE.Animation( sphereMesh, sphereMesh.animation.name )
+				sphereMeshAnimation.play();
 				
 				scene.add( sphereMesh );
-			};			
+
+			};
 			
 			var ensureLoop = function( animation ) {
 

@@ -175,10 +175,9 @@ Sidebar.Geometry = function ( editor ) {
 
 			} else {
 
-				geometryFaces.setValue( geometry.attributes.position.array.length / 3 / 3 );
+				geometryFaces.setValue( geometry.attributes.position.array.length / 9 );
 
 			}
-
 
 		}
 
