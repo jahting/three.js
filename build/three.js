@@ -9316,7 +9316,7 @@ THREE.BufferGeometry.prototype = {
 				box.center( center );
 
 				// hoping to find a boundingSphere with a radius smaller than the
-				//  boundingSphere of the boundingBox:  sqrt(3) smaller in the best case
+				// boundingSphere of the boundingBox:  sqrt(3) smaller in the best case
 
 				var maxRadiusSq = 0;
 
@@ -16807,19 +16807,7 @@ THREE.CanvasRenderer = function ( parameters ) {
 
 	if ( _context.setLineDash === undefined ) {
 
-		if ( _context.mozDash !== undefined ) {
-
-			_context.setLineDash = function ( values ) {
-
-				_context.mozDash = values[ 0 ] !== null ? values : null;
-
-			}
-
-		} else {
-
-			_context.setLineDash = function () {}
-
-		}
+		_context.setLineDash = function () {}
 
 	}
 
@@ -16889,13 +16877,13 @@ THREE.CanvasRenderer = function ( parameters ) {
 
 	this.setViewport = function ( x, y, width, height ) {
 
-		var _viewportX = x * this.devicePixelRatio;
-		var _viewportY = y * this.devicePixelRatio;
+		var viewportX = x * this.devicePixelRatio;
+		var viewportY = y * this.devicePixelRatio;
 
-		var _viewportWidth = width * this.devicePixelRatio;
-		var _viewportHeight = height * this.devicePixelRatio;
+		var viewportWidth = width * this.devicePixelRatio;
+		var viewportHeight = height * this.devicePixelRatio;
 
-		_context.setTransform( _viewportWidth / _canvasWidth, 0, 0, - _viewportHeight / _canvasHeight, _viewportX, _canvasHeight - _viewportY );
+		_context.setTransform( viewportWidth / _canvasWidth, 0, 0, - viewportHeight / _canvasHeight, viewportX, _canvasHeight - viewportY );
 		_context.translate( _canvasWidthHalf, _canvasHeightHalf );
 
 	};
