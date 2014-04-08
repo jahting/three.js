@@ -255,7 +255,7 @@ THREE.BufferGeometry.prototype = {
 
 				var indices = this.attributes[ "index" ].array;
 
-				var offsets = this.offsets;
+				var offsets = (this.offsets.length > 0 ? this.offsets : [ { start: 0, count: indices.length, index: 0 } ]);
 
 				for ( j = 0, jl = offsets.length; j < jl; ++ j ) {
 
@@ -348,28 +348,6 @@ THREE.BufferGeometry.prototype = {
 			this.normalizeNormals();
 
 			this.normalsNeedUpdate = true;
-
-		}
-
-	},
-
-	normalizeNormals: function () {
-
-		var normals = this.attributes[ "normal" ].array;
-
-		var x, y, z, n;
-
-		for ( var i = 0, il = normals.length; i < il; i += 3 ) {
-
-			x = normals[ i ];
-			y = normals[ i + 1 ];
-			z = normals[ i + 2 ];
-
-			n = 1.0 / Math.sqrt( x * x + y * y + z * z );
-
-			normals[ i     ] *= n;
-			normals[ i + 1 ] *= n;
-			normals[ i + 2 ] *= n;
 
 		}
 
@@ -683,6 +661,34 @@ THREE.BufferGeometry.prototype = {
 		*/
 
 		return offsets;
+	},
+
+	merge: function () {
+
+		console.log( 'BufferGeometry.merge(): TODO' );
+
+	},
+
+	normalizeNormals: function () {
+
+		var normals = this.attributes[ "normal" ].array;
+
+		var x, y, z, n;
+
+		for ( var i = 0, il = normals.length; i < il; i += 3 ) {
+
+			x = normals[ i ];
+			y = normals[ i + 1 ];
+			z = normals[ i + 2 ];
+
+			n = 1.0 / Math.sqrt( x * x + y * y + z * z );
+
+			normals[ i     ] *= n;
+			normals[ i + 1 ] *= n;
+			normals[ i + 2 ] *= n;
+
+		}
+
 	},
 
 	/*

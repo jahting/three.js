@@ -303,7 +303,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_canvas.width = width * this.devicePixelRatio;
 		_canvas.height = height * this.devicePixelRatio;
 
-		if ( this.devicePixelRatio !== 1 && updateStyle !== false ) {
+		if ( updateStyle !== false ) {
 
 			_canvas.style.width = width + 'px';
 			_canvas.style.height = height + 'px';
@@ -4855,16 +4855,29 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				_gl.uniform4fv( location, uniform._array );
 
-			} else if ( type === "m4") { // single THREE.Matrix4
+			} else if ( type === "m3") { // single THREE.Matrix3
+
+				_gl.uniformMatrix3fv( location, false, value.elements );
+
+			} else if ( type === "m3v" ) { // array of THREE.Matrix3
 
 				if ( uniform._array === undefined ) {
 
-					uniform._array = new Float32Array( 16 );
+					uniform._array = new Float32Array( 9 * value.length );
 
 				}
 
-				value.flattenToArray( uniform._array );
-				_gl.uniformMatrix4fv( location, false, uniform._array );
+				for ( i = 0, il = value.length; i < il; i ++ ) {
+
+					value[ i ].flattenToArrayOffset( uniform._array, i * 9 );
+
+				}
+
+				_gl.uniformMatrix3fv( location, false, uniform._array );
+
+			} else if ( type === "m4") { // single THREE.Matrix4
+
+				_gl.uniformMatrix4fv( location, false, value.elements );
 
 			} else if ( type === "m4v" ) { // array of THREE.Matrix4
 
