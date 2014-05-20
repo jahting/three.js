@@ -339,7 +339,18 @@ var Loader = function ( editor ) {
 			geometry.sourceType = "ascii";
 			geometry.sourceFile = file.name;
 
-			var mesh = new THREE.Mesh( geometry, material );
+			var mesh;
+
+			if ( geometry.animation && geometry.animation.hierarchy ) {
+
+				mesh = new THREE.SkinnedMesh( geometry, material );
+
+			} else {
+
+				mesh = new THREE.Mesh( geometry, material );
+
+			}
+
 			mesh.name = filename;
 
 			editor.addObject( mesh );
@@ -363,14 +374,7 @@ var Loader = function ( editor ) {
 
 		} else if ( data.metadata.type.toLowerCase() === 'scene' ) {
 
-			// DEPRECATED
-
-			var loader = new THREE.SceneLoader();
-			loader.parse( data, function ( result ) {
-
-				editor.setScene( result.scene );
-
-			}, '' );
+			console.error( 'Editor: Scene format 3 is no longer supported.' );
 
 		}
 

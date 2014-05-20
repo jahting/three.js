@@ -15,7 +15,7 @@ THREE.Geometry = function () {
 	this.name = '';
 
 	this.vertices = [];
-	this.colors = [];  // one-to-one vertex colors, used in ParticleSystem and Line
+	this.colors = [];  // one-to-one vertex colors, used in Points and Line
 
 	this.faces = [];
 
@@ -454,6 +454,13 @@ THREE.Geometry.prototype = {
 	},
 
 	merge: function ( geometry, matrix, materialIndexOffset ) {
+
+		if ( geometry instanceof THREE.Geometry === false ) {
+
+			console.error( 'THREE.Geometry.merge(): geometry not an instance of THREE.Geometry.', geometry );
+			return;
+
+		}
 
 		var normalMatrix,
 		vertexOffset = this.vertices.length,

@@ -218,6 +218,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	var _fragmentShaderPrecisionMediumpFloat = _gl.getShaderPrecisionFormat( _gl.FRAGMENT_SHADER, _gl.MEDIUM_FLOAT );
 	var _fragmentShaderPrecisionLowpFloat = _gl.getShaderPrecisionFormat( _gl.FRAGMENT_SHADER, _gl.LOW_FLOAT );
 
+	/*
 	var _vertexShaderPrecisionHighpInt = _gl.getShaderPrecisionFormat( _gl.VERTEX_SHADER, _gl.HIGH_INT );
 	var _vertexShaderPrecisionMediumpInt = _gl.getShaderPrecisionFormat( _gl.VERTEX_SHADER, _gl.MEDIUM_INT );
 	var _vertexShaderPrecisionLowpInt = _gl.getShaderPrecisionFormat( _gl.VERTEX_SHADER, _gl.LOW_INT );
@@ -225,6 +226,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	var _fragmentShaderPrecisionHighpInt = _gl.getShaderPrecisionFormat( _gl.FRAGMENT_SHADER, _gl.HIGH_INT );
 	var _fragmentShaderPrecisionMediumpInt = _gl.getShaderPrecisionFormat( _gl.FRAGMENT_SHADER, _gl.MEDIUM_INT );
 	var _fragmentShaderPrecisionLowpInt = _gl.getShaderPrecisionFormat( _gl.FRAGMENT_SHADER, _gl.LOW_INT );
+	*/
 
 	// clamp precision to maximum available
 
@@ -236,12 +238,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 		if ( mediumpAvailable ) {
 
 			_precision = "mediump";
-			console.warn( "WebGLRenderer: highp not supported, using mediump" );
+			console.warn( 'THREE.WebGLRenderer: highp not supported, using mediump.' );
 
 		} else {
 
 			_precision = "lowp";
-			console.warn( "WebGLRenderer: highp and mediump not supported, using lowp" );
+			console.warn( 'THREE.WebGLRenderer: highp and mediump not supported, using lowp.' );
 
 		}
 
@@ -250,7 +252,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	if ( _precision === "mediump" && ! mediumpAvailable ) {
 
 		_precision = "lowp";
-		console.warn( "WebGLRenderer: mediump not supported, using lowp" );
+		console.warn( 'THREE.WebGLRenderer: mediump not supported, using lowp.' );
 
 	}
 
@@ -356,7 +358,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.setClearColorHex = function ( hex, alpha ) {
 
-		console.warn( 'DEPRECATED: .setClearColorHex() is being removed. Use .setClearColor() instead.' );
+		console.warn( 'THREE.WebGLRenderer: .setClearColorHex() is being removed. Use .setClearColor() instead.' );
 		this.setClearColor( hex, alpha );
 
 	};
@@ -969,10 +971,10 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 					var size = 1;   // "f" and "i"
 
-					if( attribute.type === "v2" ) size = 2;
-					else if( attribute.type === "v3" ) size = 3;
-					else if( attribute.type === "v4" ) size = 4;
-					else if( attribute.type === "c"  ) size = 3;
+					if ( attribute.type === "v2" ) size = 2;
+					else if ( attribute.type === "v3" ) size = 3;
+					else if ( attribute.type === "v4" ) size = 4;
+					else if ( attribute.type === "c"  ) size = 3;
 
 					attribute.size = size;
 
@@ -2442,7 +2444,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 					normalArray,
 					i, il = object.count * 3;
 
-				for( i = 0; i < il; i += 9 ) {
+				for ( i = 0; i < il; i += 9 ) {
 
 					normalArray = object.normalArray;
 
@@ -2672,7 +2674,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			}
 
-		} else if ( object instanceof THREE.ParticleSystem ) {
+		} else if ( object instanceof THREE.PointCloud ) {
 
 			// render particles
 
@@ -2705,7 +2707,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				var type, size;
 
-				if ( index.array instanceof Uint32Array ){
+				if ( index.array instanceof Uint32Array ) {
 
 					type = _gl.UNSIGNED_INT;
 					size = 4;
@@ -3004,7 +3006,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		// render particles
 
-		} else if ( object instanceof THREE.ParticleSystem ) {
+		} else if ( object instanceof THREE.PointCloud ) {
 
 			_gl.drawArrays( _gl.POINTS, 0, geometryGroup.__webglParticleCount );
 
@@ -3295,7 +3297,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			if ( object.visible ) {
 
-				if ( ! ( object instanceof THREE.Mesh || object instanceof THREE.ParticleSystem ) || ! ( object.frustumCulled ) || _frustum.intersectsObject( object ) ) {
+				if ( object.frustumCulled === false || _frustum.intersectsObject( object ) === true ) {
 
 					setupMatrices( object, camera );
 
@@ -3760,7 +3762,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 					}
 
-				} else if ( object instanceof THREE.ParticleSystem ) {
+				} else if ( object instanceof THREE.PointCloud ) {
 
 					if ( ! geometry.__webglVertexBuffer ) {
 
@@ -3801,7 +3803,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 				}
 
 			} else if ( object instanceof THREE.Line ||
-						object instanceof THREE.ParticleSystem ) {
+						object instanceof THREE.PointCloud ) {
 
 				geometry = object.geometry;
 				addBuffer( scene.__webglObjects, geometry, object );
@@ -3870,7 +3872,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			// check all geometry groups
 
-			for( var i = 0, il = geometry.geometryGroupsList.length; i < il; i ++ ) {
+			for ( var i = 0, il = geometry.geometryGroupsList.length; i < il; i ++ ) {
 
 				geometryGroup = geometry.geometryGroupsList[ i ];
 
@@ -3925,7 +3927,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 			material.attributes && clearCustomAttributes( material );
 
 
-		} else if ( object instanceof THREE.ParticleSystem ) {
+		} else if ( object instanceof THREE.PointCloud ) {
 
 			material = getBufferMaterial( object, geometry );
 
@@ -3975,7 +3977,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	function removeObject( object, scene ) {
 
 		if ( object instanceof THREE.Mesh  ||
-			 object instanceof THREE.ParticleSystem ||
+			 object instanceof THREE.PointCloud ||
 			 object instanceof THREE.Line ) {
 
 			removeInstances( scene.__webglObjects, object );
@@ -4062,7 +4064,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			shaderID = 'dashed';
 
-		} else if ( material instanceof THREE.ParticleSystemMaterial ) {
+		} else if ( material instanceof THREE.PointCloudMaterial ) {
 
 			shaderID = 'particle_basic';
 
@@ -4398,7 +4400,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 				refreshUniformsLine( m_uniforms, material );
 				refreshUniformsDash( m_uniforms, material );
 
-			} else if ( material instanceof THREE.ParticleSystemMaterial ) {
+			} else if ( material instanceof THREE.PointCloudMaterial ) {
 
 				refreshUniformsParticle( m_uniforms, material );
 
@@ -4904,7 +4906,8 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				if ( !texture ) continue;
 
-				if ( texture.image instanceof Array && texture.image.length === 6 ) {
+				if ( texture instanceof THREE.CubeTexture ||
+				   ( texture.image instanceof Array && texture.image.length === 6 ) ) { // CompressedTexture can have Array in image :/
 
 					setCubeTexture( texture, textureUnit );
 
@@ -4926,7 +4929,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				}
 
-				for( i = 0, il = uniform.value.length; i < il; i ++ ) {
+				for ( i = 0, il = uniform.value.length; i < il; i ++ ) {
 
 					uniform._array[ i ] = getTextureUnit();
 
@@ -4934,7 +4937,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				_gl.uniform1iv( location, uniform._array );
 
-				for( i = 0, il = uniform.value.length; i < il; i ++ ) {
+				for ( i = 0, il = uniform.value.length; i < il; i ++ ) {
 
 					texture = uniform.value[ i ];
 					textureUnit = uniform._array[ i ];
@@ -5533,10 +5536,10 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			} else if ( texture instanceof THREE.CompressedTexture ) {
 
-				for( var i = 0, il = mipmaps.length; i < il; i ++ ) {
+				for ( var i = 0, il = mipmaps.length; i < il; i ++ ) {
 
 					mipmap = mipmaps[ i ];
-					if ( texture.format!==THREE.RGBAFormat ) {
+					if ( texture.format !== THREE.RGBAFormat ) {
 						_gl.compressedTexImage2D( _gl.TEXTURE_2D, i, glFormat, mipmap.width, mipmap.height, 0, mipmap.data );
 					} else {
 						_gl.texImage2D( _gl.TEXTURE_2D, i, glFormat, mipmap.width, mipmap.height, 0, glFormat, glType, mipmap.data );
@@ -5658,7 +5661,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 				for ( var i = 0; i < 6; i ++ ) {
 
-					if( !isCompressed ) {
+					if ( !isCompressed ) {
 
 						_gl.texImage2D( _gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, glFormat, glFormat, glType, cubeImage[ i ] );
 
@@ -5666,10 +5669,10 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 						var mipmap, mipmaps = cubeImage[ i ].mipmaps;
 
-						for( var j = 0, jl = mipmaps.length; j < jl; j ++ ) {
+						for ( var j = 0, jl = mipmaps.length; j < jl; j ++ ) {
 
 							mipmap = mipmaps[ j ];
-							if ( texture.format!==THREE.RGBAFormat ) {
+							if ( texture.format !== THREE.RGBAFormat ) {
 
 								_gl.compressedTexImage2D( _gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, j, glFormat, mipmap.width, mipmap.height, 0, mipmap.data );
 
@@ -5728,7 +5731,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 			_gl.framebufferRenderbuffer( _gl.FRAMEBUFFER, _gl.DEPTH_ATTACHMENT, _gl.RENDERBUFFER, renderbuffer );
 
 		/* For some reason this is not working. Defaulting to RGBA4.
-		} else if( ! renderTarget.depthBuffer && renderTarget.stencilBuffer ) {
+		} else if ( ! renderTarget.depthBuffer && renderTarget.stencilBuffer ) {
 
 			_gl.renderbufferStorage( _gl.RENDERBUFFER, _gl.STENCIL_INDEX8, renderTarget.width, renderTarget.height );
 			_gl.framebufferRenderbuffer( _gl.FRAMEBUFFER, _gl.STENCIL_ATTACHMENT, _gl.RENDERBUFFER, renderbuffer );
@@ -6060,7 +6063,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		var maxShadows = 0;
 
-		for ( var l = 0, ll = lights.length; l < ll; l++ ) {
+		for ( var l = 0, ll = lights.length; l < ll; l ++ ) {
 
 			var light = lights[ l ];
 
