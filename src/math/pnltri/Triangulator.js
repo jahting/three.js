@@ -30,6 +30,7 @@
  *
  ******************************************************************************/
 
+/** @constructor */
 PNLTRI.Triangulator = function () {
 	
 	this.lastPolyData = null;		// for Debug purposes only

@@ -27,6 +27,7 @@ PNLTRI.TRAP_TLR_BM = 8;		// top-cusp, bottom-middle
 PNLTRI.TRAP_TM_BLR = 9;		// top-middle, bottom-cusp
 
 
+/** @constructor */
 PNLTRI.MonoSplitter = function ( inPolygonData ) {
 	
 	this.polyData = inPolygonData;
@@ -87,7 +88,7 @@ PNLTRI.MonoSplitter.prototype = {
 		if ( !thisTrap || thisTrap.monoDiag ) 		return;
 		
 		if ( !thisTrap.lseg || !thisTrap.rseg ) {
-			console.log("alyTrap: lseg/rseg missing", thisTrap);
+			console.log("ERR alyTrap: lseg/rseg missing", thisTrap);
 			thisTrap.monoDiag = PNLTRI.TRAP_NOSPLIT;
 			return;
 		}

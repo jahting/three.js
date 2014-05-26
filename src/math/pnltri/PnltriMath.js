@@ -4,13 +4,18 @@
 
 PNLTRI.Math = {
 
+	log2: function ( inNum ) {
+		// return	Math.log2(inNum);			// not everywhere defined !!
+		return	Math.log(inNum)/Math.LN2;
+	},
+
 	random: Math.random,		// function to use for random number generation
 
 	// generate random ordering in place:
 	//	Fisher-Yates shuffle
 	array_shuffle: function( inoutArray ) {
 		for (var i = inoutArray.length - 1; i > 0; i-- ) {
-			var j = Math.floor( this.random() * (i+1) );
+			var j = Math.floor( PNLTRI.Math.random() * (i+1) );
 			var tmp = inoutArray[i];
 			inoutArray[i] = inoutArray[j];
 			inoutArray[j] = tmp;

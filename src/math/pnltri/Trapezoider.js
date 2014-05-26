@@ -5,6 +5,7 @@
 
 PNLTRI.trapCounter = 0;
 
+/** @constructor */
 PNLTRI.Trapezoid = function ( inHigh, inLow, inLeft, inRight ) {
 	
 	this.trapID = PNLTRI.trapCounter++;			// for Debug
@@ -99,6 +100,7 @@ PNLTRI.S_RIGHT = 2;
 
 PNLTRI.qsCounter = 0;
 
+/** @constructor */
 PNLTRI.QsNode = function ( inNodetype, inParent, inData ) {
 
 	this.qsNodeID = PNLTRI.qsCounter++;			// for Debug
@@ -142,14 +144,15 @@ PNLTRI.QsNode.prototype = {
  *
  *============================================================================*/
 
+/** @constructor */
 PNLTRI.QueryStructure = function ( inPolygonData ) {
 	// initialise the query structure and trapezoid list
 	PNLTRI.trapCounter = 0;
 	PNLTRI.qsCounter = 0;
 	
-	this.root = new PNLTRI.QsNode( PNLTRI.T_SINK );
+	this.root = new PNLTRI.QsNode( PNLTRI.T_SINK, null, null );
 
-	var initialTrap = new PNLTRI.Trapezoid();
+	var initialTrap = new PNLTRI.Trapezoid( null, null, null, null );
 	initialTrap.setSink( this.root );
 	this.root.trap = initialTrap;
 
@@ -161,18 +164,17 @@ PNLTRI.QueryStructure = function ( inPolygonData ) {
 		/*
 		 * adds and initializes specific attributes for all segments
 		 *	// -> QueryStructure: roots of partial tree where vertex is located
-		 *	root0:	for vFrom
-		 *	root1:	for vTo
+		 *	rootFrom, rootTo:	for vFrom, vTo
 		 *	// marker
 		 *	is_inserted:	already inserted into QueryStructure ?
 		 */
 		for ( var i = 0; i < this.segListArray.length; i++ ) {
-			this.segListArray[i].root0 = this.segListArray[i].root1 = this.root;
+			this.segListArray[i].rootFrom = this.segListArray[i].rootTo = this.root;
 			this.segListArray[i].is_inserted = false;
 		}
 		this.compare_pts_yx = inPolygonData.compare_pts_yx;
 	} else {
-		var myPolygonData = new PNLTRI.PolygonData();
+		var myPolygonData = new PNLTRI.PolygonData( null );
 		this.compare_pts_yx = myPolygonData.compare_pts_yx;
 	}
 };
@@ -318,11 +320,11 @@ PNLTRI.QueryStructure.prototype = {
 							//	segments to avoid that "next" segment to cross the longer of our two segments
 							if ( inPt == inQsNode.seg.vFrom.pt ) {
 								// connected at inQsNode.seg.vFrom
-								console.log("ptNode: co-linear, going back on previous segment, connected at inQsNode.seg.vFrom", inPt, inPtOther, inQsNode );
+//								console.log("ptNode: co-linear, going back on previous segment, connected at inQsNode.seg.vFrom", inPt, inPtOther, inQsNode );
 								sideRightAbove = true;				// ??? TODO: for test_add_segment_spezial_4B !!
 							} else {
 								// connected at inQsNode.seg.vTo
-								console.log("ptNode: co-linear, going back on previous segment, connected at inQsNode.seg.vTo", inPt, inPtOther, inQsNode );
+//								console.log("ptNode: co-linear, going back on previous segment, connected at inQsNode.seg.vTo", inPt, inPtOther, inQsNode );
 								sideRightAbove = false;				// ??? TODO: for test_add_segment_spezial_4A !!
 							}
 						}
@@ -533,7 +535,7 @@ PNLTRI.QueryStructure.prototype = {
 					trNewRight.setBelow( trCurrent.d0, trCurrent.d1 );
 					trNewLeft.setBelow( trCurrent.d0, null );
 				} else {							// trCurrent.loPt lies ON inSegment
-					console.log( "two_trap_below: loPt ON new segment" );
+//					console.log( "two_trap_below: loPt ON new segment" );
 					trNext = trCurrent.d0;				// TODO: for test_add_segment_spezial_4A -> like intersecting d0
 		
 					trCurrent.d0.setAbove( trNewLeft, trNewRight );
@@ -564,15 +566,15 @@ PNLTRI.QueryStructure.prototype = {
 		if ( inSegment.upward ) {
 			segLowPt	= inSegment.vFrom.pt;
 			segHighPt	= inSegment.vTo.pt;
-			segLowRoot		= inSegment.root0;
-			segHighRoot		= inSegment.root1;
+			segLowRoot		= inSegment.rootFrom;
+			segHighRoot		= inSegment.rootTo;
 			segLowAdjSeg	= inSegment.sprev;
 			segHighAdjSeg	= inSegment.snext;
 		} else {
 			segLowPt	= inSegment.vTo.pt;
 			segHighPt	= inSegment.vFrom.pt;
-			segLowRoot		= inSegment.root1;
-			segHighRoot		= inSegment.root0;
+			segLowRoot		= inSegment.rootTo;
+			segHighRoot		= inSegment.rootFrom;
 			segLowAdjSeg	= inSegment.snext;
 			segHighAdjSeg	= inSegment.sprev;
 		}
@@ -634,7 +636,7 @@ PNLTRI.QueryStructure.prototype = {
 			//  and redirecting the parent PNLTRI.T_X-Node to the extended sink
 			// !!! destroys tree structure since several nodes now point to the same PNLTRI.T_SINK !!!
 			// TODO: maybe it's not a problem;
-			//  merging of PNLTRI.T_X-Nodes is no option, since they are used as "root0/root1" !
+			//  merging of PNLTRI.T_X-Nodes is no option, since they are used as "rootFrom/rootTo" !
 			//
 			changeLeftUp = changeRightUp = true;
 			if ( trPrevRight && ( trPrevRight.rseg == trCurrent.rseg ) ) {
@@ -718,6 +720,7 @@ PNLTRI.QueryStructure.prototype = {
  *
  *============================================================================*/
 
+/** @constructor */
 PNLTRI.Trapezoider = function ( inPolygonData ) {
 
 	this.polyData		= inPolygonData;
@@ -739,12 +742,12 @@ PNLTRI.Trapezoider.prototype = {
 	//
 	math_logstar_n: function ( inNum ) {
 		var i, v;
-		for ( i = 0, v = inNum; v >= 1; i++ ) { v = Math.log2(v) }		// Math.log2() = Math.log()/Math.LN2 !!
+		for ( i = 0, v = inNum; v >= 1; i++ ) { v = PNLTRI.Math.log2(v) }
 		return	( i - 1 );
 	},
 	math_NH: function ( inN, inH ) {
 		var i, v;
-		for ( i = 0, v = inN; i < inH; i++ ) { v = Math.log2(v) }		// Math.log2() = Math.log()/Math.LN2 !!
+		for ( i = 0, v = inN; i < inH; i++ ) { v = PNLTRI.Math.log2(v) }
 		return	Math.ceil( 1.0 * inN / v );
 	},
 
@@ -762,8 +765,8 @@ PNLTRI.Trapezoider.prototype = {
 	
 	find_new_roots: function ( inSegment ) {					// <<<< private
 		if ( !inSegment.is_inserted ) {
-			inSegment.root0 = this.queryStructure.ptNode( inSegment.vFrom.pt, inSegment.vTo.pt, inSegment.root0 );
-			inSegment.root1 = this.queryStructure.ptNode( inSegment.vTo.pt, inSegment.vFrom.pt, inSegment.root1 );
+			inSegment.rootFrom = this.queryStructure.ptNode( inSegment.vFrom.pt, inSegment.vTo.pt, inSegment.rootFrom );
+			inSegment.rootTo = this.queryStructure.ptNode( inSegment.vTo.pt, inSegment.vFrom.pt, inSegment.rootTo );
 		}
 	},
 

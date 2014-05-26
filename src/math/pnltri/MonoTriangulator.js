@@ -7,6 +7,7 @@
  */
 
 
+/** @constructor */
 PNLTRI.MonoTriangulator = function ( inPolygonData ) {
 	
 	this.polyData	= inPolygonData;
@@ -46,7 +47,7 @@ PNLTRI.MonoTriangulator.prototype = {
 		
 		function error_cleanup() {
 			// Error in algorithm OR polygon is not uni-y-monotone
-			console.log( "ERROR uni-y-monotone: only concave angles left", vertBackLog );
+			console.log( "ERR uni-y-monotone: only concave angles left", vertBackLog );
 			// push all "wrong" triangles => loop ends
 			while (vertBackLogIdx > 1) {
 				vertBackLogIdx--;

@@ -2,6 +2,7 @@
  * @author jahting / http://www.ameco.tv/
  */
 
+/** @constructor */
 PNLTRI.PolygonData = function ( inPolygonChainList ) {
 
 	// list of polygon vertices
