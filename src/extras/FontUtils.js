@@ -10,13 +10,6 @@
  * 		For converting fonts and rendering with javascript
  *		http://typeface.neocracy.org
  *
- *	Triangulation ported from AS3
- *		Simple Polygon Triangulation
- *		http://actionsnippet.com/?p=1462
- *
- * 	A Method to triangulate shapes with holes
- *		http://www.sakri.net/blog/2009/06/12/an-approach-to-triangulating-polygons-with-holes/
- *
  */
 
 THREE.FontUtils = {
