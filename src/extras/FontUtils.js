@@ -14,23 +14,23 @@
 
 THREE.FontUtils = {
 
-	faces : {},
+	faces: {},
 
 	// Just for now. face[weight][style]
 
-	face : "helvetiker",
-	weight: "normal",
-	style : "normal",
-	size : 150,
-	divisions : 10,
+	face: 'helvetiker',
+	weight: 'normal',
+	style: 'normal',
+	size: 150,
+	divisions: 10,
 
-	getFace : function() {
+	getFace: function () {
 
 		return this.faces[ this.face ][ this.weight ][ this.style ];
 
 	},
 
-	loadFace : function( data ) {
+	loadFace: function ( data ) {
 
 		var family = data.familyName.toLowerCase();
 
@@ -47,7 +47,7 @@ THREE.FontUtils = {
 
 	},
 
-	drawText : function( text ) {
+	drawText: function ( text ) {
 
 		var characterPts = [], allPts = [];
 
@@ -89,14 +89,14 @@ THREE.FontUtils = {
 		//extract.paths = fontPaths;
 		//extract.offset = width;
 
-		return { paths : fontPaths, offset : width };
+		return { paths: fontPaths, offset: width };
 
 	},
 
 
 
 
-	extractGlyphPoints : function( c, face, scale, offset, path ) {
+	extractGlyphPoints: function ( c, face, scale, offset, path ) {
 
 		var pts = [];
 
@@ -107,7 +107,7 @@ THREE.FontUtils = {
 			laste,
 			glyph = face.glyphs[ c ] || face.glyphs[ '?' ];
 
-		if ( !glyph ) return;
+		if ( ! glyph ) return;
 
 		if ( glyph.o ) {
 
@@ -123,14 +123,14 @@ THREE.FontUtils = {
 
 				//console.log( action );
 
-				switch( action ) {
+				switch ( action ) {
 
 				case 'm':
 
 					// Move To
 
-					x = outline[ i++ ] * scaleX + offset;
-					y = outline[ i++ ] * scaleY;
+					x = outline[ i ++ ] * scaleX + offset;
+					y = outline[ i ++ ] * scaleY;
 
 					path.moveTo( x, y );
 					break;
@@ -139,21 +139,21 @@ THREE.FontUtils = {
 
 					// Line To
 
-					x = outline[ i++ ] * scaleX + offset;
-					y = outline[ i++ ] * scaleY;
-					path.lineTo(x,y);
+					x = outline[ i ++ ] * scaleX + offset;
+					y = outline[ i ++ ] * scaleY;
+					path.lineTo( x,y );
 					break;
 
 				case 'q':
 
 					// QuadraticCurveTo
 
-					cpx  = outline[ i++ ] * scaleX + offset;
-					cpy  = outline[ i++ ] * scaleY;
-					cpx1 = outline[ i++ ] * scaleX + offset;
-					cpy1 = outline[ i++ ] * scaleY;
+					cpx  = outline[ i ++ ] * scaleX + offset;
+					cpy  = outline[ i ++ ] * scaleY;
+					cpx1 = outline[ i ++ ] * scaleX + offset;
+					cpy1 = outline[ i ++ ] * scaleY;
 
-					path.quadraticCurveTo(cpx1, cpy1, cpx, cpy);
+					path.quadraticCurveTo( cpx1, cpy1, cpx, cpy );
 
 					laste = pts[ pts.length - 1 ];
 
@@ -177,12 +177,12 @@ THREE.FontUtils = {
 
 					// Cubic Bezier Curve
 
-					cpx  = outline[ i++ ] *  scaleX + offset;
-					cpy  = outline[ i++ ] *  scaleY;
-					cpx1 = outline[ i++ ] *  scaleX + offset;
-					cpy1 = outline[ i++ ] * -scaleY;
-					cpx2 = outline[ i++ ] *  scaleX + offset;
-					cpy2 = outline[ i++ ] * -scaleY;
+					cpx  = outline[ i ++ ] *  scaleX + offset;
+					cpy  = outline[ i ++ ] *  scaleY;
+					cpx1 = outline[ i ++ ] *  scaleX + offset;
+					cpy1 = outline[ i ++ ] * - scaleY;
+					cpx2 = outline[ i ++ ] *  scaleX + offset;
+					cpy2 = outline[ i ++ ] * - scaleY;
 
 					path.bezierCurveTo( cpx, cpy, cpx1, cpy1, cpx2, cpy2 );
 
@@ -212,24 +212,24 @@ THREE.FontUtils = {
 
 
 
-		return { offset: glyph.ha*scale, path:path};
+		return { offset: glyph.ha * scale, path:path };
 	}
 
 };
 
 
-THREE.FontUtils.generateShapes = function( text, parameters ) {
+THREE.FontUtils.generateShapes = function ( text, parameters ) {
 
 	// Parameters 
 
 	parameters = parameters || {};
 
 	var size = parameters.size !== undefined ? parameters.size : 100;
-	var curveSegments = parameters.curveSegments !== undefined ? parameters.curveSegments: 4;
+	var curveSegments = parameters.curveSegments !== undefined ? parameters.curveSegments : 4;
 
-	var font = parameters.font !== undefined ? parameters.font : "helvetiker";
-	var weight = parameters.weight !== undefined ? parameters.weight : "normal";
-	var style = parameters.style !== undefined ? parameters.style : "normal";
+	var font = parameters.font !== undefined ? parameters.font : 'helvetiker';
+	var weight = parameters.weight !== undefined ? parameters.weight : 'normal';
+	var style = parameters.style !== undefined ? parameters.style : 'normal';
 
 	THREE.FontUtils.size = size;
 	THREE.FontUtils.divisions = curveSegments;
