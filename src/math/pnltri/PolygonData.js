@@ -214,7 +214,6 @@ PNLTRI.PolygonData.prototype = {
 			this.segments[i].mprev = this.segments[i].sprev;
 			this.segments[i].mnext = this.segments[i].snext;
 			// out-going segments of a vertex (max: 4)
-//			this.segments[i].vFrom.outSegs = [ {vertTo: this.segments[i].snext.vFrom, 	// next vertex: first outgoing segment
 			this.segments[i].vFrom.outSegs = [ { segOut: this.segments[i],			// first outgoing segment
 												 vertTo: this.segments[i].vTo } ];	// next vertex: other end of outgoing segment
 		}
@@ -351,7 +350,7 @@ PNLTRI.PolygonData.prototype = {
 			while ( (frontPt = frontMono.vFrom) != firstPt ) {
 				if (frontMono.marked) {
 					processed = true;
-					break;		// break from while
+					break;	// from while
 				} else {
 					frontMono.marked = true;
 				}
@@ -360,11 +359,10 @@ PNLTRI.PolygonData.prototype = {
 					monoPosmax = frontMono;
 				}
 				frontMono = frontMono.mnext;
-			}	// end while
-			if (processed) continue;		// Go to next polygon
+			}
+			if (processed) continue;	// Go to next polygon
 			uniqueMonoChainsMax.push(monoPosmax);
-		}	// end for
-		//
+		}
 		return	uniqueMonoChainsMax;
 	},
 	
