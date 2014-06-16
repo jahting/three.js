@@ -7271,9 +7271,7 @@ THREE.Object3D.prototype = {
 
 		return function ( axis, distance ) {
 
-			v1.copy( axis );
-
-			v1.applyQuaternion( this.quaternion );
+			v1.copy( axis ).applyQuaternion( this.quaternion );
 
 			this.position.add( v1.multiplyScalar( distance ) );
 
@@ -21575,7 +21573,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 		vertexColors, faceColor,
 		vertexTangents,
 		uv, uv2, v1, v2, v3, v4, t1, t2, t3, t4, n1, n2, n3, n4,
-		c1, c2, c3, c4,
+		c1, c2, c3,
 		sw1, sw2, sw3, sw4,
 		si1, si2, si3, si4,
 		sa1, sa2, sa3, sa4,
@@ -29735,6 +29733,7 @@ THREE.Animation.prototype.update = (function(){
 	};
 
 	return function ( delta ) {
+
 		if ( this.isPlaying === false ) return;
 
 		this.currentTime += delta * this.timeScale;
@@ -29744,7 +29743,6 @@ THREE.Animation.prototype.update = (function(){
 
 		//
 
-		var vector;
 		var duration = this.data.length;
 
 		if ( this.loop === true && this.currentTime > duration ) {
@@ -29806,8 +29804,6 @@ THREE.Animation.prototype.update = (function(){
 
 				if ( type === "pos" ) {
 
-					vector = object.position;
-
 					if ( this.interpolationType === THREE.AnimationHandler.LINEAR ) {
 
 						newVector.x = prevXYZ[ 0 ] + ( nextXYZ[ 0 ] - prevXYZ[ 0 ] ) * scale;
@@ -29815,17 +29811,21 @@ THREE.Animation.prototype.update = (function(){
 						newVector.z = prevXYZ[ 2 ] + ( nextXYZ[ 2 ] - prevXYZ[ 2 ] ) * scale;
 
 						// blend
-						if (object instanceof THREE.Bone) {
+						if ( object instanceof THREE.Bone ) {
 
 							var proportionalWeight = this.weight / ( this.weight + object.accumulatedPosWeight );
-							vector.lerp( newVector, proportionalWeight );
+							object.position.lerp( newVector, proportionalWeight );
 							object.accumulatedPosWeight += this.weight;
 
-						} else
-							vector = newVector;
+						} else {
+
+							object.position.copy( newVector );
+
+						}
+
 
 					} else if ( this.interpolationType === THREE.AnimationHandler.CATMULLROM ||
-						this.interpolationType === THREE.AnimationHandler.CATMULLROM_FORWARD ) {
+								this.interpolationType === THREE.AnimationHandler.CATMULLROM_FORWARD ) {
 
 						points[ 0 ] = this.getPrevKeyWith( "pos", h, prevKey.index - 1 )[ "pos" ];
 						points[ 1 ] = prevXYZ;
@@ -29835,17 +29835,19 @@ THREE.Animation.prototype.update = (function(){
 						scale = scale * 0.33 + 0.33;
 
 						var currentPoint = interpolateCatmullRom( points, scale );
-
+						var proportionalWeight = 1;
+						
 						if ( object instanceof THREE.Bone ) {
 
-							var proportionalWeight = this.weight / ( this.weight + object.accumulatedPosWeight );
+							proportionalWeight = this.weight / ( this.weight + object.accumulatedPosWeight );
 							object.accumulatedPosWeight += this.weight;
 
 						}
-						else
-							var proportionalWeight = 1;
 
 						// blend
+
+						var vector = object.position;
+						
 						vector.x = vector.x + ( currentPoint[ 0 ] - vector.x ) * proportionalWeight;
 						vector.y = vector.y + ( currentPoint[ 1 ] - vector.y ) * proportionalWeight;
 						vector.z = vector.z + ( currentPoint[ 2 ] - vector.z ) * proportionalWeight;
@@ -29875,14 +29877,12 @@ THREE.Animation.prototype.update = (function(){
 
 						object.quaternion.copy(newQuat);
 
-					}
-					else if ( object.accumulatedRotWeight === 0) {
+					} else if ( object.accumulatedRotWeight === 0 ) {
 
 						object.quaternion.copy(newQuat);
 						object.accumulatedRotWeight = this.weight;
 
-					}
-					else {
+					} else {
 
 						var proportionalWeight = this.weight / ( this.weight + object.accumulatedRotWeight );
 						THREE.Quaternion.slerp( object.quaternion, newQuat, object.quaternion, proportionalWeight );
@@ -29892,8 +29892,6 @@ THREE.Animation.prototype.update = (function(){
 
 				} else if ( type === "scl" ) {
 
-					vector = object.scale;
-
 					newVector.x = prevXYZ[ 0 ] + ( nextXYZ[ 0 ] - prevXYZ[ 0 ] ) * scale;
 					newVector.y = prevXYZ[ 1 ] + ( nextXYZ[ 1 ] - prevXYZ[ 1 ] ) * scale;
 					newVector.z = prevXYZ[ 2 ] + ( nextXYZ[ 2 ] - prevXYZ[ 2 ] ) * scale;
@@ -29901,11 +29899,14 @@ THREE.Animation.prototype.update = (function(){
 					if ( object instanceof THREE.Bone ) {
 
 						var proportionalWeight = this.weight / ( this.weight + object.accumulatedSclWeight);
-						vector.lerp( newVector, proportionalWeight );
+						object.scale.lerp( newVector, proportionalWeight );
 						object.accumulatedSclWeight += this.weight;
 
-					} else
-						vector = newVector;
+					} else {
+
+						object.scale.copy( newVector );
+
+					}
 
 				}
 
@@ -36186,6 +36187,7 @@ PNLTRI.PolygonData = function ( inPolygonChainList ) {
 	//  during the subdivision into uni-y-monotone polygons (s. this.monoSubPolyChains)
 	// doubly linked by: snext, sprev
 	this.segments = [];
+	this.idNextPolyChain = 0;
 	
 	// indices into this.segments: at least one for each monoton chain for the polygon
 	//  these subdivide the polygon into uni-y-monotone polygons, that is
@@ -36199,9 +36201,8 @@ PNLTRI.PolygonData = function ( inPolygonChainList ) {
 	
 	// initialize optional polygon chains
 	if ( inPolygonChainList ) {
-		this.addPolygonChain( inPolygonChainList[0], false );		// contour
-		for (var i=1, j=inPolygonChainList.length; i<j; i++) {		// holes
-			this.addPolygonChain( inPolygonChainList[i], true );
+		for (var i=0, j=inPolygonChainList.length; i<j; i++) {
+			this.addPolygonChain( inPolygonChainList[i] );
 		}
 	}
 
@@ -36223,6 +36224,10 @@ PNLTRI.PolygonData.prototype = {
 	},
 	getTriangles: function () {
 		return	this.triangles.concat();
+	},
+
+	nbPolyChains: function () {
+		return	this.idNextPolyChain;
 	},
 
 		
@@ -36248,16 +36253,6 @@ PNLTRI.PolygonData.prototype = {
 		}
 	},
 
-	// calculates the area of a polygon
-	polygon_area: function ( inContour ) {
-		var cLen = inContour.length;
-		var dblArea = 0.0;
-		for( var p = cLen - 1, q = 0; q < cLen; p = q++ ) {
-			dblArea += inContour[ p ].x * inContour[ q ].y - inContour[ q ].x * inContour[ p ].y;
-		}
-		return dblArea * 0.5;
-	},
-
 	
 	/*	Operations  */
 	
@@ -36275,6 +36270,7 @@ PNLTRI.PolygonData.prototype = {
 
 	createSegmentEntry: function ( inVertexFrom, inVertexTo ) {			// private
 		return	{
+			chainId: this.idNextPolyChain,
 			// end points of segment
 			vFrom: inVertexFrom,	// -> start point entry in vertices
 			vTo: inVertexTo,		// -> end point entry in vertices
@@ -36295,19 +36291,13 @@ PNLTRI.PolygonData.prototype = {
 	},
 	
 
-	addVertexChain: function ( inRawPointList, inIsHole ) {			// private
+	addVertexChain: function ( inRawPointList ) {			// private
 		
 		function verts_equal( inVert1, inVert2 ) {
 			return ( ( Math.abs(inVert1.x - inVert2.x) < PNLTRI.Math.EPSILON_P ) &&
 					 ( Math.abs(inVert1.y - inVert2.y) < PNLTRI.Math.EPSILON_P ) );
 		}
 		
-		var reverse = false;
-		if ( inIsHole != null ) {		// adapt segment direction to polygon chain type ?
-			var orientation = ( this.polygon_area( inRawPointList ) < 0 );		// CW ?
-			reverse = ( inIsHole != orientation );
-		}
-		//
 		var newVertices = [];
 		var newVertex, acceptVertex, prevIdx;
 		for ( var i=0; i < inRawPointList.length; i++ ) {
@@ -36327,19 +36317,15 @@ PNLTRI.PolygonData.prototype = {
 			 verts_equal( newVertices[newVertices.length-1], newVertices[0] ) ) {
 			newVertices.pop();
 		}
-		if ( reverse ) {
-			// console.log( "Polygon chain reversed! " + newVertices[0].x + "/" + newVertices[0].y );
-			newVertices = newVertices.reverse();		// vertex-index preserving reversal !!!
-		}
 		
 		return	newVertices;
 	},
 	
 
-	addPolygonChain: function ( inRawPointList, inIsHole ) {			// <<<<<< public
+	addPolygonChain: function ( inRawPointList ) {			// <<<<<< public
 		
 		// vertices
-		var newVertices = this.addVertexChain( inRawPointList, inIsHole );
+		var newVertices = this.addVertexChain( inRawPointList );
 		if ( newVertices.length < 3 ) {
 			console.log( "Polygon has < 3 vertices!", newVertices );
 			return	0;
@@ -36368,6 +36354,7 @@ PNLTRI.PolygonData.prototype = {
 		firstSeg.sprev = segment;
 		segment.snext = firstSeg;
 		
+		this.idNextPolyChain++;
 		return	this.segments.length - saveSegListLength;
 	},
 	
@@ -36551,6 +36538,177 @@ PNLTRI.PolygonData.prototype = {
 		this.triangles.push( [ inVert1.id, inVert2.id, inVert3.id ] );
 	},
 	
+};
+
+
+/**
+ * Simple Polygon Triangulation
+ *
+ * description of technique employed:
+ *	http://www.siggraph.org/education/materials/HyperGraph/scanline/outprims/polygon1.htm
+ *
+ * This code is a quick port of code written in C++ which was submitted to
+ *	flipcode.com by John W. Ratcliff  // July 22, 2000
+ * See original code and more information here:
+ *	http://www.flipcode.com/archives/Efficient_Polygon_Triangulation.shtml
+ *
+ * ported to actionscript by Zevan Rosser
+ *	http://actionsnippet.com/?p=1462
+ *
+ * ported to javascript by Joshua Koo
+ *	http://www.lab4games.net/zz85/blog
+ *
+ */
+
+/** @constructor */
+PNLTRI.BasicTriangulator = function ( inPolygonData ) {
+
+	this.polyData	= inPolygonData;
+
+};
+
+
+
+PNLTRI.BasicTriangulator.prototype = {
+
+	constructor: PNLTRI.BasicTriangulator,
+
+
+	//	algorithm to triangulate a polygon in O(n^3) time.		// TODO (n^2) ?
+
+
+	// takes one element of a double linked segment list
+
+	triangulate_single_polygon: function ( inStartSeg ) {
+
+		function vertList( inStartSeg ) {		// TODO: prevent endless loop ?
+			var verts = [];
+			/* we want a counter-clockwise polygon in verts */
+			var doubleArea = 0.0;
+			var cursor = inStartSeg;
+			var p,q;
+			var idx = 0;
+			do {
+				p = cursor.sprev.vFrom;
+				q = cursor.vFrom;
+				doubleArea += p.x * q.y - q.x * p.y;
+				verts[idx++] = q;
+				cursor = cursor.snext;
+			} while ( cursor != inStartSeg );
+			if ( doubleArea < 0.0 ) {
+				verts = verts.reverse();
+			}
+			return	verts;
+		}
+
+		function snip( verts, u, v, w, n ) {
+
+			var ax = verts[ u ].x;
+			var ay = verts[ u ].y;
+
+			var bx = verts[ v ].x;
+			var by = verts[ v ].y;
+
+			var cx = verts[ w ].x;
+			var cy = verts[ w ].y;
+
+			if ( PNLTRI.Math.EPSILON_P > ( ( bx - ax ) * ( cy - ay ) - ( by - ay ) * ( cx - ax ) ) ) return false;
+
+			var aX, aY, bX, bY, cX, cY;
+
+			aX = cx - bx;  aY = cy - by;
+			bX = ax - cx;  bY = ay - cy;
+			cX = bx - ax;  cY = by - ay;
+
+			var p, px, py;
+
+			var apx, apy, bpx, bpy, cpx, cpy;
+			var cCROSSap, bCROSScp, aCROSSbp;
+
+			for ( p = 0; p < n; p ++ ) {
+
+				px = verts[ p ].x
+				py = verts[ p ].y
+
+				apx = px - ax;  apy = py - ay;
+					if ( ( apx == 0 ) && ( apy == 0 ) )		continue;
+				bpx = px - bx;  bpy = py - by;
+					if ( ( bpx == 0 ) && ( bpy == 0 ) )		continue;
+				cpx = px - cx;  cpy = py - cy;
+					if ( ( cpx == 0 ) && ( cpy == 0 ) )		continue;
+
+				// see if p is inside triangle abc
+
+				aCROSSbp = aX * bpy - aY * bpx;
+				cCROSSap = cX * apy - cY * apx;
+				bCROSScp = bX * cpy - bY * cpx;
+
+				if ( ( aCROSSbp >= PNLTRI.Math.EPSILON_N ) &&
+					 ( bCROSScp >= PNLTRI.Math.EPSILON_N ) &&
+					 ( cCROSSap >= PNLTRI.Math.EPSILON_N ) ) return false;
+
+			}
+
+			return true;
+
+		};
+
+		var result = [];
+
+		var	verts = vertList( inStartSeg );		/* we want a counter-clockwise polygon in verts */
+
+		var n = verts.length;
+		var nv = n;
+
+		var u, v, w;
+
+		/*  remove nv - 2 vertices, creating 1 triangle every time */
+
+		var count = 2 * nv;   /* error detection */
+
+		for ( v = nv - 1; nv > 2; ) {
+
+			/* if we loop, it is probably a non-simple polygon */
+
+			if ( ( count -- ) <= 0 )	return false;
+
+			/* three consecutive vertices in current polygon, <u,v,w> */
+
+			u = v; 	 	if ( nv <= u ) u = 0;     /* previous */
+			v = u + 1;  if ( nv <= v ) v = 0;     /* new v    */
+			w = v + 1;  if ( nv <= w ) w = 0;     /* next     */
+
+			if ( snip( verts, u, v, w, nv ) ) {
+
+				/* output Triangle */
+
+//				this.polyData.addTriangle( verts[ u ].id, verts[ v ].id, verts[ w ].id );
+				this.polyData.triangles.push( [ verts[ u ].id, verts[ v ].id, verts[ w ].id ] );
+
+				/* remove v from the remaining polygon */
+
+				var s, t;
+
+				for ( s = v, t = v + 1; t < nv; s++, t++ ) {
+
+					verts[ s ] = verts[ t ];
+
+				}
+
+				nv --;
+
+				/* reset error detection counter */
+
+				count = 2 * nv;
+
+			}
+
+		}
+
+		return true;
+
+	},
+
 };
 
 
@@ -37475,6 +37633,25 @@ PNLTRI.Trapezoider.prototype = {
 	},
 
 	
+	optimise_randomlist: function ( inOutSegListArray ) {
+		// makes sure that the first N segments are one from each of the N polygon chains
+		var mainIdx = 0;
+		var helpIdx = this.polyData.nbPolyChains();
+		if ( helpIdx == 1 )		return;
+		var chainMarker = new Array(helpIdx);
+		var oldSegListArray = inOutSegListArray.concat();
+		for (var i=0; i<oldSegListArray.length; i++) {
+			var chainId = oldSegListArray[i].chainId;
+			if ( chainMarker[chainId] ) {
+				inOutSegListArray[helpIdx++] = oldSegListArray[i];
+			} else {
+				inOutSegListArray[mainIdx++] = oldSegListArray[i];
+				chainMarker[chainId] = true;
+			}
+		}
+	},
+
+	
 	/*
 	 * main methods
 	 */
@@ -37501,9 +37678,10 @@ PNLTRI.Trapezoider.prototype = {
 	trapezoide_polygon: function () {							// <<<< public
 		var myQs = this.queryStructure;
 		
-		var randSegListArray = myQs.segListArray.slice(0);
+		var randSegListArray = myQs.segListArray.concat();
 //		console.log( "Polygon Chains: ", dumpSegmentList( randSegListArray ) );
 		PNLTRI.Math.array_shuffle( randSegListArray );
+		this.optimise_randomlist( randSegListArray );
 //		console.log( "Random Segment Sequence: ", dumpRandomSequence( randSegListArray ) );
 		
 		var i, h;
@@ -37879,16 +38057,24 @@ PNLTRI.Triangulator.prototype = {
 		// initializes general polygon data structure
 		//
 		var myPolygonData = new PNLTRI.PolygonData( inPolygonChains );
-		//
-		// splits polygon into uni-y-monotone sub-polygons
-		//
-		var	myMonoSplitter = new PNLTRI.MonoSplitter( myPolygonData );
-		myMonoSplitter.monotonate_trapezoids();
-		//
-		// triangulates all uni-y-monotone sub-polygons
-		//
-		var	myTriangulator = new PNLTRI.MonoTriangulator( myPolygonData );
-		myTriangulator.triangulate_all_polygons();
+		if ( myPolygonData.nbPolyChains() == 1 ) {
+			//
+			// triangulates single polygon without holes
+			//
+			var	myTriangulator = new PNLTRI.BasicTriangulator( myPolygonData );
+			var result = myTriangulator.triangulate_single_polygon( myPolygonData.getSegments()[0] );
+		} else {
+			//
+			// splits polygon into uni-y-monotone sub-polygons
+			//
+			var	myMonoSplitter = new PNLTRI.MonoSplitter( myPolygonData );
+			myMonoSplitter.monotonate_trapezoids();
+			//
+			// triangulates all uni-y-monotone sub-polygons
+			//
+			var	myTriangulator = new PNLTRI.MonoTriangulator( myPolygonData );
+			myTriangulator.triangulate_all_polygons();
+		}
 		//
 		this.lastPolyData = myPolygonData;
 		return	myPolygonData.getTriangles();	// copy of triangle list
