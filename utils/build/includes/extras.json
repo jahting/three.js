@@ -69,7 +69,7 @@
 	"src/math/pnltri/Pnltri.js",
         "src/math/pnltri/PnltriMath.js",
         "src/math/pnltri/PolygonData.js",
-        "src/math/pnltri/BasicTriangulator.js",
+        "src/math/pnltri/EarClipTriangulator.js",
         "src/math/pnltri/Trapezoider.js",
         "src/math/pnltri/MonoSplitter.js",
         "src/math/pnltri/MonoTriangulator.js",

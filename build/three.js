@@ -15738,8 +15738,7 @@ THREE.CanvasRenderer = function ( parameters ) {
 	_contextLineWidth = null,
 	_contextLineCap = null,
 	_contextLineJoin = null,
-	_contextDashSize = null,
-	_contextGapSize = 0,
+	_contextLineDash = [],
 
 	_camera,
 
@@ -16299,13 +16298,13 @@ THREE.CanvasRenderer = function ( parameters ) {
 			setLineCap( material.linecap );
 			setLineJoin( material.linejoin );
 			setStrokeStyle( material.color.getStyle() );
-			setDashAndGap( material.dashSize, material.gapSize );
+			setLineDash( [ material.dashSize, material.gapSize ] );
 
 			_context.stroke();
 
 			_elemBox.expandByScalar( material.linewidth * 2 );
 
-			setDashAndGap( null, null );
+			setLineDash( [] );
 
 		}
 
@@ -16736,13 +16735,12 @@ THREE.CanvasRenderer = function ( parameters ) {
 
 	}
 
-	function setDashAndGap( dashSizeValue, gapSizeValue ) {
+	function setLineDash( value ) {
 
-		if ( _contextDashSize !== dashSizeValue || _contextGapSize !== gapSizeValue ) {
+		if ( _contextLineDash.length !== value.length ) {
 
-			_context.setLineDash( [ dashSizeValue, gapSizeValue ] );
-			_contextDashSize = dashSizeValue;
-			_contextGapSize = gapSizeValue;
+			_context.setLineDash( value );
+			_contextLineDash = value;
 
 		}
 
@@ -28880,9 +28878,9 @@ THREE.Shape.prototype.extractAllSpacedPoints = function ( divisions ) {
 THREE.Shape.Utils = {
 
 	triangulateShape: function ( contour, holes ) {
-		// console.log("new Triangulation");
-		var myTriangulator = new PNLTRI.Triangulator();
-		return	myTriangulator.triangulate_polygon( [ contour ].concat(holes) );
+		var pnlTriangulator = new PNLTRI.Triangulator();
+		// console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
+		return	pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) );
 	},
 
 	// calculate area of the contour polygon
@@ -35432,8 +35430,17 @@ THREE.SpritePlugin = function () {
 
 			alphaTest:			_gl.getUniformLocation( program, 'alphaTest' )
 		};
+		
+		var canvas = document.createElement( 'canvas' );
+		canvas.width = 8;
+		canvas.height = 8;
+		
+		var context = canvas.getContext( '2d' );
+		context.fillStyle = 'white';
+		context.fillRect( 0, 0, 8, 8 );
 
-		_texture = new THREE.Texture();
+		_texture = new THREE.Texture( canvas );
+		_texture.needsUpdate = true;
 
 	};
 
@@ -36108,10 +36115,11 @@ THREE.ShaderFlares = {
  * @author jahting / http://www.ameco.tv/
  *
  *	(Simple) Polygon Near-Linear Triangulation
+ *	  with fast ear-clipping for polygons without holes
  *
  */
  
-var PNLTRI = { REVISION: '0.9' };
+var PNLTRI = { REVISION: '1.0' };
 
 //	#####  Global Constants  #####
 
@@ -36219,6 +36227,9 @@ PNLTRI.PolygonData.prototype = {
 	getSegments: function () {
 		return	this.segments;
 	},
+	getFirstSegment: function () {
+		return	this.segments[0];
+	},
 	getMonoSubPolys: function () {
 		return	this.monoSubPolyChains;
 	},
@@ -36253,6 +36264,16 @@ PNLTRI.PolygonData.prototype = {
 		}
 	},
 
+	// checks winding order by calculating the area of the polygon
+	isClockWise: function ( inStartSeg ) {
+		var cursor = inStartSeg, doubleArea = 0;
+		do {
+			doubleArea += ( cursor.vFrom.x - cursor.vTo.x ) * ( cursor.vFrom.y + cursor.vTo.y );
+			cursor = cursor.snext;
+		} while ( cursor != inStartSeg );
+		return	( doubleArea < 0 );
+	},
+
 	
 	/*	Operations  */
 	
@@ -36276,7 +36297,7 @@ PNLTRI.PolygonData.prototype = {
 			vTo: inVertexTo,		// -> end point entry in vertices
 			// upward segment? (i.e. vTo > vFrom)
 			upward: ( this.compare_pts_yx(inVertexTo, inVertexFrom) == 1 ),
-			// double linked list of original polygon chains (not the monoChains !)
+			// doubly linked list of original polygon chains (not the monoChains !)
 			sprev: null,			// previous segment
 			snext: null,			// next segment
 		};
@@ -36366,7 +36387,7 @@ PNLTRI.PolygonData.prototype = {
 		for (var i = 0; i < this.segments.length; i++) {
 			// already visited during unique monoChain creation ?
 			this.segments[i].marked = false;
-			// double linked list for monotone chains (sub-polygons)
+			// doubly linked list for monotone chains (sub-polygons)
 			this.segments[i].mprev = this.segments[i].sprev;
 			this.segments[i].mnext = this.segments[i].snext;
 			// out-going segments of a vertex (max: 4)
@@ -36417,8 +36438,8 @@ PNLTRI.PolygonData.prototype = {
 					// CROSS_SINE: sin(theta) * len(v0) * len(v1)
 					return	( v0.x * v1.y - v1.x * v0.y );
 					// == 0: colinear (theta == 0 or 180 deg == PI rad)
-					// > 0:  v lies left of u
-					// < 0:  v lies right of u
+					// > 0:  v1 lies left of v0, CCW angle from v0 to v1 is convex ( < 180 deg )
+					// < 0:  v1 lies right of v0, CW angle from v0 to v1 is convex ( < 180 deg )
 				}
 				
 				var v0 = {	x: inPtFrom.x - inPtVertex.x,			// Vector inPtVertex->inPtFrom
@@ -36542,7 +36563,7 @@ PNLTRI.PolygonData.prototype = {
 
 
 /**
- * Simple Polygon Triangulation
+ * Simple Polygon Triangulation by Ear Clipping
  *
  * description of technique employed:
  *	http://www.siggraph.org/education/materials/HyperGraph/scanline/outprims/polygon1.htm
@@ -36558,32 +36579,126 @@ PNLTRI.PolygonData.prototype = {
  * ported to javascript by Joshua Koo
  *	http://www.lab4games.net/zz85/blog
  *
+ * adapted to doubly linked list by Juergen Ahting
+ *	http://www.ameco.tv
+ *
  */
 
 /** @constructor */
-PNLTRI.BasicTriangulator = function ( inPolygonData ) {
+PNLTRI.EarClipTriangulator = function ( inPolygonData ) {
 
 	this.polyData	= inPolygonData;
 
 };
 
 
+PNLTRI.EarClipTriangulator.prototype = {
 
-PNLTRI.BasicTriangulator.prototype = {
-
-	constructor: PNLTRI.BasicTriangulator,
-
-
-	//	algorithm to triangulate a polygon in O(n^3) time.		// TODO (n^2) ?
+	constructor: PNLTRI.EarClipTriangulator,
 
 
-	// takes one element of a double linked segment list
+	// triangulates first doubly linked segment list in this.polyData
+	//	algorithm uses ear-clipping and runs in O(n^2) time
 
-	triangulate_single_polygon: function ( inStartSeg ) {
+	triangulate_polygon_no_holes: function () {
 
-		function vertList( inStartSeg ) {		// TODO: prevent endless loop ?
+		function isEarAt( vertex ) {
+
+			var prevX = vertex.mprev.vFrom.x;
+			var prevY = vertex.mprev.vFrom.y;
+
+			var vertX = vertex.vFrom.x;
+			var vertY = vertex.vFrom.y;
+
+			var nextX = vertex.mnext.vFrom.x;
+			var nextY = vertex.mnext.vFrom.y;
+
+			var vnX = nextX - vertX,  vnY = nextY - vertY;
+			var npX = prevX - nextX,  npY = prevY - nextY;
+			var pvX = vertX - prevX,  pvY = vertY - prevY;
+
+			// concave angle at vertex -> not an ear to cut off
+			if ( PNLTRI.Math.EPSILON_P > ( ( pvX * vnY ) - ( vnX * pvY ) ) ) return false;
+
+			// check whether any other point lieas within the triangle abc
+			var vStop	= vertex.mprev.mprev;
+			var vOther	= vertex.mnext;
+			while ( vOther != vStop ) {
+				vOther = vOther.mnext;
+				var otherX = vOther.vFrom.x;
+				var otherY = vOther.vFrom.y;
+
+				var poX = otherX - prevX,  poY = otherY - prevY;
+					// just in case there are several vertices with the same coordinate
+					if ( ( poX == 0 ) && ( poY == 0 ) )		continue;	// vOther == vertex.mprev
+				var voX = otherX - vertX,  voY = otherY - vertY;
+					if ( ( voX == 0 ) && ( voY == 0 ) )		continue;	// vOther == vertex
+				var noX = otherX - nextX,  noY = otherY - nextY;
+					if ( ( noX == 0 ) && ( noY == 0 ) )		continue;	// vOther == vertex.mnext
+
+				// if vOther is inside triangle abc -> not an ear to cut off
+				if ( ( ( vnX * voY - vnY * voX ) >= PNLTRI.Math.EPSILON_N ) &&
+					 ( ( pvX * poY - pvY * poX ) >= PNLTRI.Math.EPSILON_N ) &&
+					 ( ( npX * noY - npY * noX ) >= PNLTRI.Math.EPSILON_N ) ) return false;
+			}
+			return true;
+
+		};
+
+		var myPolyData = this.polyData;
+		var startSeg = myPolyData.getFirstSegment();
+
+		// create a counter-clockwise ordered doubly linked list (monoChain links)
+
+		var cursor = startSeg;
+		if ( myPolyData.isClockWise( startSeg ) ) {
+			do {	// reverses chain order
+				cursor.mprev = cursor.snext;
+				cursor.mnext = cursor.sprev;
+				cursor = cursor.sprev;
+			} while ( cursor != startSeg );
+		} else {
+			do {
+				cursor.mprev = cursor.sprev;
+				cursor.mnext = cursor.snext;
+				cursor = cursor.snext;
+			} while ( cursor != startSeg );
+		}
+
+		//  remove all vertices except 2, creating 1 triangle every time
+
+		var vertex = startSeg;
+		var fullLoop = vertex;   // prevent infinite loop on "defective" polygons
+		
+		while ( vertex.mnext != vertex.mprev ) {
+			if ( isEarAt( vertex ) ) {
+				// found a triangle ear to cut off
+				this.polyData.addTriangle( vertex.mprev.vFrom, vertex.vFrom, vertex.mnext.vFrom );
+				// remove vertex from the remaining chain
+				vertex.mprev.mnext = vertex.mnext;
+				vertex.mnext.mprev = vertex.mprev;
+				vertex = vertex.mnext;
+				fullLoop = vertex;			// reset error detection
+			} else {
+				vertex = vertex.mnext;
+				// loop?: probably non-simple polygon -> stop with error
+				if ( vertex == fullLoop )	return false;
+			}
+		}
+
+		return true;
+
+	},
+
+/*	// takes one element of a double linked segment list
+	//	works on array of vertices
+
+	triangulate_polygon_no_holes: function () {
+		var startSeg = this.polyData.getFirstSegment();
+
+		function vertList( inStartSeg ) {
 			var verts = [];
-			/* we want a counter-clockwise polygon in verts */
+			// we want a counter-clockwise polygon in verts
 			var doubleArea = 0.0;
 			var cursor = inStartSeg;
 			var p,q;
@@ -36597,6 +36712,8 @@ PNLTRI.BasicTriangulator.prototype = {
 			} while ( cursor != inStartSeg );
 			if ( doubleArea < 0.0 ) {
 				verts = verts.reverse();
+				var tmp = verts.pop();
+				verts.unshift( tmp );
 			}
 			return	verts;
 		}
@@ -36655,37 +36772,36 @@ PNLTRI.BasicTriangulator.prototype = {
 
 		var result = [];
 
-		var	verts = vertList( inStartSeg );		/* we want a counter-clockwise polygon in verts */
+		var	verts = vertList( startSeg );
 
 		var n = verts.length;
 		var nv = n;
 
 		var u, v, w;
 
-		/*  remove nv - 2 vertices, creating 1 triangle every time */
+		//  remove nv - 2 vertices, creating 1 triangle every time
 
-		var count = 2 * nv;   /* error detection */
+		var count = 2 * nv;   // error detection
 
 		for ( v = nv - 1; nv > 2; ) {
 
-			/* if we loop, it is probably a non-simple polygon */
+			// if we loop, it is probably a non-simple polygon
 
 			if ( ( count -- ) <= 0 )	return false;
 
-			/* three consecutive vertices in current polygon, <u,v,w> */
+			// three consecutive vertices in current polygon, <u,v,w>
 
-			u = v; 	 	if ( nv <= u ) u = 0;     /* previous */
-			v = u + 1;  if ( nv <= v ) v = 0;     /* new v    */
-			w = v + 1;  if ( nv <= w ) w = 0;     /* next     */
+			u = v; 	 	if ( nv <= u ) u = 0;     // previous
+			v = u + 1;  if ( nv <= v ) v = 0;     // new v
+			w = v + 1;  if ( nv <= w ) w = 0;     // next
 
 			if ( snip( verts, u, v, w, nv ) ) {
 
-				/* output Triangle */
+				// output Triangle
 
-//				this.polyData.addTriangle( verts[ u ].id, verts[ v ].id, verts[ w ].id );
-				this.polyData.triangles.push( [ verts[ u ].id, verts[ v ].id, verts[ w ].id ] );
+				this.polyData.addTriangle( verts[ u ], verts[ v ], verts[ w ] );
 
-				/* remove v from the remaining polygon */
+				// remove v from the remaining polygon
 
 				var s, t;
 
@@ -36694,10 +36810,13 @@ PNLTRI.BasicTriangulator.prototype = {
 					verts[ s ] = verts[ t ];
 
 				}
-
+				
 				nv --;
 
-				/* reset error detection counter */
+				v --;
+				if ( v < 0 )	v = nv-1;
+
+				// reset error detection counter
 
 				count = 2 * nv;
 
@@ -36707,7 +36826,7 @@ PNLTRI.BasicTriangulator.prototype = {
 
 		return true;
 
-	},
+	},		*/
 
 };
 
@@ -37930,14 +38049,14 @@ PNLTRI.MonoTriangulator.prototype = {
 			if ( nextMono.mnext == prevMono ) {		// already a triangle
 				this.polyData.addTriangle( monoPosmax.vFrom, nextMono.vFrom, prevMono.vFrom );
 			} else {								// triangulate the polygon
-				this.triangulate_single_polygon( monoPosmax );
+				this.triangulate_monotone_polygon( monoPosmax );
 			}
 		}
 	},
 
 	//	algorithm to triangulate an uni-y-monotone polygon in O(n) time.[FoM84]
 	 
-	triangulate_single_polygon: function ( monoPosmax ) {
+	triangulate_monotone_polygon: function ( monoPosmax ) {
 		var scope = this;
 		
 		function error_cleanup() {
@@ -38050,20 +38169,31 @@ PNLTRI.Triangulator.prototype = {
 
 	constructor: PNLTRI.Triangulator,
 
-	
-	triangulate_polygon: function ( inPolygonChains ) {
+
+	triangulate_polygon: function ( inPolygonChains, inForceTrapezoidation ) {
+
+		// collected conditions for selecting EarClipTriangulator over Seidel's algorithm
+		function is_basic_polygon() {
+			if (inForceTrapezoidation)	return	false;
+			return	( myPolygonData.nbPolyChains() == 1 );
+		}
+
+
 		if ( ( !inPolygonChains ) || ( inPolygonChains.length == 0 ) )		return	[];
 		//
 		// initializes general polygon data structure
 		//
 		var myPolygonData = new PNLTRI.PolygonData( inPolygonChains );
-		if ( myPolygonData.nbPolyChains() == 1 ) {
+		//
+		var basicPolygon = is_basic_polygon();
+		if ( basicPolygon ) {
 			//
 			// triangulates single polygon without holes
 			//
-			var	myTriangulator = new PNLTRI.BasicTriangulator( myPolygonData );
-			var result = myTriangulator.triangulate_single_polygon( myPolygonData.getSegments()[0] );
-		} else {
+			var	myTriangulator = new PNLTRI.EarClipTriangulator( myPolygonData );
+			basicPolygon = myTriangulator.triangulate_polygon_no_holes();
+		}
+		if ( !basicPolygon ) {
 			//
 			// splits polygon into uni-y-monotone sub-polygons
 			//

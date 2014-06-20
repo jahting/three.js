@@ -124,9 +124,9 @@ THREE.Shape.prototype.extractAllSpacedPoints = function ( divisions ) {
 THREE.Shape.Utils = {
 
 	triangulateShape: function ( contour, holes ) {
-		// console.log("new Triangulation");
-		var myTriangulator = new PNLTRI.Triangulator();
-		return	myTriangulator.triangulate_polygon( [ contour ].concat(holes) );
+		var pnlTriangulator = new PNLTRI.Triangulator();
+		// console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
+		return	pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) );
 	},
 
 	// calculate area of the contour polygon
