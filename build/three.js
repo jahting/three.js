@@ -28880,7 +28880,9 @@ THREE.Shape.Utils = {
 	triangulateShape: function ( contour, holes ) {
 		var pnlTriangulator = new PNLTRI.Triangulator();
 		// console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
-		return	pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) );
+		var result = { faces: pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) ) };
+		result.order = pnlTriangulator.get_chainOrder().concat();
+		return	result;
 	},
 
 	// calculate area of the contour polygon
@@ -30809,7 +30811,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	var vertices = shapePoints.shape;
 	var holes = shapePoints.holes;
 
-	var reverse = ! THREE.Shape.Utils.isClockWise( vertices ) ;
+/*	var reverse = ! THREE.Shape.Utils.isClockWise( vertices ) ;
 
 	if ( reverse ) {
 
@@ -30829,13 +30831,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 		}
 
-		reverse = false; // If vertices are in order now, we shouldn't need to worry about them again (hopefully)!
-
-	}
+	}	*/
 
 
-	var faces = THREE.Shape.Utils.triangulateShape ( vertices, holes );
-
+	var triangResult = THREE.Shape.Utils.triangulateShape ( vertices, holes );
+	var faces = triangResult.faces;
+	var contoursCCW = triangResult.order;
+	
 	/* Vertices */
 
 	var contour = vertices; // vertices has all points but contour has only points of circumference
@@ -31218,13 +31220,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	function buildSideFaces() {
 
 		var layeroffset = 0;
-		sidewalls( contour, layeroffset );
+		sidewalls( contour, layeroffset, !contoursCCW.shift() );
 		layeroffset += contour.length;
 
 		for ( h = 0, hl = holes.length;  h < hl; h ++ ) {
 
 			ahole = holes[ h ];
-			sidewalls( ahole, layeroffset );
+			sidewalls( ahole, layeroffset, !contoursCCW.shift() );
 
 			//, true
 			layeroffset += ahole.length;
@@ -31233,7 +31235,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 	}
 
-	function sidewalls( contour, layeroffset ) {
+	function sidewalls( contour, layeroffset, orderCW ) {
 
 		var j, k;
 		i = contour.length;
@@ -31258,7 +31260,10 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 					c = layeroffset + k + slen2,
 					d = layeroffset + j + slen2;
 
-				f4( a, b, c, d, contour, s, sl, j, k );
+				if ( orderCW )
+					f4( a, b, c, d, contour, s, sl, j, k );
+				else
+					f4( a, d, c, b, contour, s, sl, j, k );
 
 			}
 		}
@@ -31436,8 +31441,6 @@ THREE.ShapeGeometry.prototype.addShape = function ( shape, options ) {
 	var material = options.material;
 	var uvgen = options.UVGenerator === undefined ? THREE.ExtrudeGeometry.WorldUVGenerator : options.UVGenerator;
 
-	var shapebb = this.shapebb;
-
 	//
 
 	var i, l, hole, s;
@@ -31447,36 +31450,11 @@ THREE.ShapeGeometry.prototype.addShape = function ( shape, options ) {
 
 	var vertices = shapePoints.shape;
 	var holes = shapePoints.holes;
-
-	var reverse = ! THREE.Shape.Utils.isClockWise( vertices );
-
-	if ( reverse ) {
-
-		vertices = vertices.reverse();
-
-		// Maybe we should also check if holes are in the opposite direction, just to be safe...
-
-		for ( i = 0, l = holes.length; i < l; i ++ ) {
-
-			hole = holes[ i ];
-
-			if ( THREE.Shape.Utils.isClockWise( hole ) ) {
-
-				holes[ i ] = hole.reverse();
-
-			}
-
-		}
-
-		reverse = false;
-
-	}
-
-	var faces = THREE.Shape.Utils.triangulateShape( vertices, holes );
+	
+	var triangResult = THREE.Shape.Utils.triangulateShape ( vertices, holes );
+	var faces = triangResult.faces;
 
 	// Vertices
-
-	var contour = vertices;
 
 	for ( i = 0, l = holes.length; i < l; i ++ ) {
 
@@ -31489,7 +31467,6 @@ THREE.ShapeGeometry.prototype.addShape = function ( shape, options ) {
 
 	var vert, vlen = vertices.length;
 	var face, flen = faces.length;
-	var cont, clen = contour.length;
 
 	for ( i = 0; i < vlen; i ++ ) {
 
@@ -36195,7 +36172,10 @@ PNLTRI.PolygonData = function ( inPolygonChainList ) {
 	//  during the subdivision into uni-y-monotone polygons (s. this.monoSubPolyChains)
 	// doubly linked by: snext, sprev
 	this.segments = [];
+	
+	// for the original polygon chains
 	this.idNextPolyChain = 0;
+	this.chainOrderOK = [];			// for each chain: is the winding order ok?
 	
 	// indices into this.segments: at least one for each monoton chain for the polygon
 	//  these subdivide the polygon into uni-y-monotone polygons, that is
@@ -36239,6 +36219,16 @@ PNLTRI.PolygonData.prototype = {
 
 	nbPolyChains: function () {
 		return	this.idNextPolyChain;
+	},
+	
+	// for the polygon data AFTER triangulation
+	//	returns an Array of flags,
+	//	one flag for each polygon chain: is the winding order ok?
+	get_chainOrder: function () {
+		return	this.chainOrderOK;
+	},
+	set_chainOrder_wrong: function ( inChainId ) {
+		this.chainOrderOK[inChainId] = false;
 	},
 
 		
@@ -36375,8 +36365,28 @@ PNLTRI.PolygonData.prototype = {
 		firstSeg.sprev = segment;
 		segment.snext = firstSeg;
 		
-		this.idNextPolyChain++;
+		this.chainOrderOK[this.idNextPolyChain++] = true;
 		return	this.segments.length - saveSegListLength;
+	},
+
+	
+	// reverse winding order of a polygon chain
+	reverse_polygon_chain: function ( inSomeSegment ) {
+		this.set_chainOrder_wrong( inSomeSegment.chainId );
+		var tmp, frontSeg = inSomeSegment;
+		do {
+			// change link direction
+			tmp = frontSeg.snext;
+			frontSeg.snext = frontSeg.sprev;
+			frontSeg.sprev = tmp;
+			// exchange vertices
+			tmp = frontSeg.vTo;
+			frontSeg.vTo = frontSeg.vFrom;
+			frontSeg.vFrom = tmp;
+			frontSeg.upward = !frontSeg.upward;
+			// continue with old snext
+			frontSeg = frontSeg.sprev;
+		} while ( frontSeg != inSomeSegment );
 	},
 	
 
@@ -36657,6 +36667,7 @@ PNLTRI.EarClipTriangulator.prototype = {
 				cursor.mnext = cursor.sprev;
 				cursor = cursor.sprev;
 			} while ( cursor != startSeg );
+			myPolyData.set_chainOrder_wrong(0);
 		} else {
 			do {
 				cursor.mprev = cursor.sprev;
@@ -36954,9 +36965,8 @@ PNLTRI.QueryStructure = function ( inPolygonData ) {
 
 	this.trapArray = [ initialTrap ];
 
-	this.segListArray = null;
 	if ( inPolygonData ) {
-		this.segListArray = inPolygonData.getSegments();
+		var segListArray = inPolygonData.getSegments();
 		/*
 		 * adds and initializes specific attributes for all segments
 		 *	// -> QueryStructure: roots of partial tree where vertex is located
@@ -36964,14 +36974,12 @@ PNLTRI.QueryStructure = function ( inPolygonData ) {
 		 *	// marker
 		 *	is_inserted:	already inserted into QueryStructure ?
 		 */
-		for ( var i = 0; i < this.segListArray.length; i++ ) {
-			this.segListArray[i].rootFrom = this.segListArray[i].rootTo = this.root;
-			this.segListArray[i].is_inserted = false;
+		for ( var i = 0; i < segListArray.length; i++ ) {
+			segListArray[i].rootFrom = segListArray[i].rootTo = this.root;
+			segListArray[i].is_inserted = false;
 		}
 		this.compare_pts_yx = inPolygonData.compare_pts_yx;
 	} else {
-//		var myPolygonData = new PNLTRI.PolygonData( null );
-//		this.compare_pts_yx = myPolygonData.compare_pts_yx;
 		this.compare_pts_yx = PNLTRI.PolygonData.prototype.compare_pts_yx;
 	}
 };
@@ -36982,9 +36990,6 @@ PNLTRI.QueryStructure.prototype = {
 
 	getRoot: function () {
 		return this.root;
-	},
-	getSegListArray: function () {
-		return this.segListArray;
 	},
 		
 	
@@ -37659,40 +37664,6 @@ PNLTRI.QueryStructure.prototype = {
 	},
 	
 
-	// reverse winding order of a polygon chain
-	reverse_polygon_chain: function ( inSomeSegment ) {
-		var tmp, frontSeg = inSomeSegment;
-		do {
-			// change link direction
-			tmp = frontSeg.snext;
-			frontSeg.snext = frontSeg.sprev;
-			frontSeg.sprev = tmp;
-			// exchange vertices
-			tmp = frontSeg.vTo;
-			frontSeg.vTo = frontSeg.vFrom;
-			frontSeg.vFrom = tmp;
-			frontSeg.upward = !frontSeg.upward;
-			// continue with old snext
-			frontSeg = frontSeg.sprev;
-		} while ( frontSeg != inSomeSegment );
-	},
-
-
-	// Check segment orientation and reverse polyChain winding order if necessary
-	//	=> contour: CCW, holes: CW
-	//	=> all trapezoids lseg/rseg have opposing directions,
-	//		assumed, the missing outer segments have CW orientation !
-	
-	normalize_segment_orientation: function () {
-		var thisSeg;
-		for ( var i = 0; i < this.segListArray.length; i++ ) {
-			thisSeg = this.segListArray[i];
-			if ( thisSeg.upward == ( ( thisSeg.trLeft.depth % 2 ) == 0 ) )
-				this.reverse_polygon_chain( thisSeg );
-		}
-	},
-
-
 	// Find one triangular trapezoid which lies inside the polygon
 	// !! does NOT depend on the orientation of segments CCW/CW !!
 	
@@ -37770,7 +37741,22 @@ PNLTRI.Trapezoider.prototype = {
 		}
 	},
 
+
+	// Check segment orientation and reverse polyChain winding order if necessary
+	//	=> contour: CCW, holes: CW
+	//	=> all trapezoids lseg/rseg have opposing directions,
+	//		assumed, the missing outer segments have CW orientation !
 	
+	normalize_segment_orientation: function () {
+		var segListArray = this.polyData.getSegments();
+		for ( var i = 0; i < segListArray.length; i++ ) {
+			var thisSeg = segListArray[i];
+			if ( thisSeg.upward == ( ( thisSeg.trLeft.depth % 2 ) == 0 ) )
+				this.polyData.reverse_polygon_chain( thisSeg );
+		}
+	},
+
+
 	/*
 	 * main methods
 	 */
@@ -37795,16 +37781,15 @@ PNLTRI.Trapezoider.prototype = {
 	//	neighbor links.
 	
 	trapezoide_polygon: function () {							// <<<< public
-		var myQs = this.queryStructure;
-		
-		var randSegListArray = myQs.segListArray.concat();
+		var randSegListArray = this.polyData.getSegments().concat();
 //		console.log( "Polygon Chains: ", dumpSegmentList( randSegListArray ) );
 		PNLTRI.Math.array_shuffle( randSegListArray );
 		this.optimise_randomlist( randSegListArray );
 //		console.log( "Random Segment Sequence: ", dumpRandomSequence( randSegListArray ) );
 		
-		var i, h;
 		var anzSegs = randSegListArray.length;
+		var myQs = this.queryStructure;
+		var i, h;
 
 		var logStarN = this.math_logstar_n(anzSegs);
 		for (h = 1; h <= logStarN; h++) {
@@ -37824,7 +37809,7 @@ PNLTRI.Trapezoider.prototype = {
 		}
 		
 		myQs.assignDepths();
-		myQs.normalize_segment_orientation();
+		this.normalize_segment_orientation();
 	},
 
 };
@@ -38168,6 +38153,19 @@ PNLTRI.Triangulator = function () {
 PNLTRI.Triangulator.prototype = {
 
 	constructor: PNLTRI.Triangulator,
+
+
+	clear_lastData: function () {	// save memory after Debug
+		this.lastPolyData = null;
+	},
+	
+	// for the polygon data AFTER triangulation
+	//	returns an Array of flags,
+	//	one flag for each polygon chain: is the winding order ok?
+	get_chainOrder: function () {
+		if ( this.lastPolyData )	return this.lastPolyData.get_chainOrder();
+		return	null;
+	},
 
 
 	triangulate_polygon: function ( inPolygonChains, inForceTrapezoidation ) {

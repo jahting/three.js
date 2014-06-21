@@ -126,7 +126,9 @@ THREE.Shape.Utils = {
 	triangulateShape: function ( contour, holes ) {
 		var pnlTriangulator = new PNLTRI.Triangulator();
 		// console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
-		return	pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) );
+		var result = { faces: pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) ) };
+		result.order = pnlTriangulator.get_chainOrder().concat();
+		return	result;
 	},
 
 	// calculate area of the contour polygon

@@ -136,7 +136,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	var vertices = shapePoints.shape;
 	var holes = shapePoints.holes;
 
-	var reverse = ! THREE.Shape.Utils.isClockWise( vertices ) ;
+/*	var reverse = ! THREE.Shape.Utils.isClockWise( vertices ) ;
 
 	if ( reverse ) {
 
@@ -156,13 +156,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 		}
 
-		reverse = false; // If vertices are in order now, we shouldn't need to worry about them again (hopefully)!
-
-	}
+	}	*/
 
 
-	var faces = THREE.Shape.Utils.triangulateShape ( vertices, holes );
-
+	var triangResult = THREE.Shape.Utils.triangulateShape ( vertices, holes );
+	var faces = triangResult.faces;
+	var contoursCCW = triangResult.order;
+	
 	/* Vertices */
 
 	var contour = vertices; // vertices has all points but contour has only points of circumference
@@ -545,13 +545,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	function buildSideFaces() {
 
 		var layeroffset = 0;
-		sidewalls( contour, layeroffset );
+		sidewalls( contour, layeroffset, !contoursCCW.shift() );
 		layeroffset += contour.length;
 
 		for ( h = 0, hl = holes.length;  h < hl; h ++ ) {
 
 			ahole = holes[ h ];
-			sidewalls( ahole, layeroffset );
+			sidewalls( ahole, layeroffset, !contoursCCW.shift() );
 
 			//, true
 			layeroffset += ahole.length;
@@ -560,7 +560,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 	}
 
-	function sidewalls( contour, layeroffset ) {
+	function sidewalls( contour, layeroffset, orderCW ) {
 
 		var j, k;
 		i = contour.length;
@@ -585,7 +585,10 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 					c = layeroffset + k + slen2,
 					d = layeroffset + j + slen2;
 
-				f4( a, b, c, d, contour, s, sl, j, k );
+				if ( orderCW )
+					f4( a, b, c, d, contour, s, sl, j, k );
+				else
+					f4( a, d, c, b, contour, s, sl, j, k );
 
 			}
 		}
