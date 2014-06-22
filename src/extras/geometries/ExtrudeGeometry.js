@@ -136,32 +136,9 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	var vertices = shapePoints.shape;
 	var holes = shapePoints.holes;
 
-/*	var reverse = ! THREE.Shape.Utils.isClockWise( vertices ) ;
-
-	if ( reverse ) {
-
-		vertices = vertices.reverse();
-
-		// Maybe we should also check if holes are in the opposite direction, just to be safe ...
-
-		for ( h = 0, hl = holes.length; h < hl; h ++ ) {
-
-			ahole = holes[ h ];
-
-			if ( THREE.Shape.Utils.isClockWise( ahole ) ) {
-
-				holes[ h ] = ahole.reverse();
-
-			}
-
-		}
-
-	}	*/
-
-
 	var triangResult = THREE.Shape.Utils.triangulateShape ( vertices, holes );
 	var faces = triangResult.faces;
-	var contoursCCW = triangResult.order;
+	var insideOnLeftSide = triangResult.order;
 	
 	/* Vertices */
 
@@ -287,6 +264,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	}
 
 
+	var moveToTheLeft = !insideOnLeftSide[0];
 	var contourMovements = [];
 
 	for ( var i = 0, il = contour.length, j = il - 1, k = i + 1; i < il; i ++, j ++, k ++ ) {
@@ -294,14 +272,14 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 		if ( j === il ) j = 0;
 		if ( k === il ) k = 0;
 
-		//  (j)---(i)---(k)
 		// console.log('i,j,k', i, j , k)
-
-		var pt_i = contour[ i ];
-		var pt_j = contour[ j ];
-		var pt_k = contour[ k ];
-
-		contourMovements[ i ]= getBevelVec( contour[ i ], contour[ j ], contour[ k ] );
+		
+		if ( moveToTheLeft )
+			//  (j)---(i)---(k)
+			contourMovements[ i ]= getBevelVec( contour[ i ], contour[ j ], contour[ k ] );
+		else
+			//  (k)---(i)---(j)
+			contourMovements[ i ]= getBevelVec( contour[ i ], contour[ k ], contour[ j ] );
 
 	}
 
@@ -310,6 +288,7 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	for ( h = 0, hl = holes.length; h < hl; h ++ ) {
 
 		ahole = holes[ h ];
+		moveToTheLeft = !insideOnLeftSide[1+h];
 
 		oneHoleMovements = [];
 
@@ -318,8 +297,12 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 			if ( j === il ) j = 0;
 			if ( k === il ) k = 0;
 
-			//  (j)---(i)---(k)
-			oneHoleMovements[ i ]= getBevelVec( ahole[ i ], ahole[ j ], ahole[ k ] );
+			if ( moveToTheLeft )
+				//  (j)---(i)---(k)
+				oneHoleMovements[ i ]= getBevelVec( ahole[ i ], ahole[ j ], ahole[ k ] );
+			else
+				//  (k)---(i)---(j)
+				oneHoleMovements[ i ]= getBevelVec( ahole[ i ], ahole[ k ], ahole[ j ] );
 
 		}
 
@@ -545,13 +528,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	function buildSideFaces() {
 
 		var layeroffset = 0;
-		sidewalls( contour, layeroffset, !contoursCCW.shift() );
+		sidewalls( contour, layeroffset, !insideOnLeftSide[0] );
 		layeroffset += contour.length;
 
 		for ( h = 0, hl = holes.length;  h < hl; h ++ ) {
 
 			ahole = holes[ h ];
-			sidewalls( ahole, layeroffset, !contoursCCW.shift() );
+			sidewalls( ahole, layeroffset, !insideOnLeftSide[1+h] );
 
 			//, true
 			layeroffset += ahole.length;

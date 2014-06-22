@@ -125,9 +125,9 @@ THREE.Shape.Utils = {
 
 	triangulateShape: function ( contour, holes ) {
 		var pnlTriangulator = new PNLTRI.Triangulator();
-		// console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
+		console.log("new Triangulation: PnlTri.js " + PNLTRI.REVISION );
 		var result = { faces: pnlTriangulator.triangulate_polygon( [ contour ].concat(holes) ) };
-		result.order = pnlTriangulator.get_chainOrder().concat();
+		result.order = pnlTriangulator.get_PolyLeftArr();
 		return	result;
 	},
 
