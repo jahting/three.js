@@ -35,8 +35,6 @@ THREE.ExtrudeGeometry = function ( shapes, options ) {
 
 	shapes = shapes instanceof Array ? shapes : [ shapes ];
 
-	this.shapebb = shapes[ shapes.length - 1 ].getBoundingBox();
-
 	this.addShapeList( shapes, options );
 
 	this.computeFaceNormals();
@@ -84,11 +82,6 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 	// Use default WorldUVGenerator if no UV generators are specified.
 	var uvgen = options.UVGenerator !== undefined ? options.UVGenerator : THREE.ExtrudeGeometry.WorldUVGenerator;
-
-	var shapebb = this.shapebb;
-	//shapebb = shape.getBoundingBox();
-
-
 
 	var splineTube, binormal, normal, position2;
 	if ( extrudePath ) {
@@ -528,13 +521,13 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 	function buildSideFaces() {
 
 		var layeroffset = 0;
-		sidewalls( contour, layeroffset, !insideOnLeftSide[0] );
+		sidewalls( contour, layeroffset, insideOnLeftSide[0] );
 		layeroffset += contour.length;
 
 		for ( h = 0, hl = holes.length;  h < hl; h ++ ) {
 
 			ahole = holes[ h ];
-			sidewalls( ahole, layeroffset, !insideOnLeftSide[1+h] );
+			sidewalls( ahole, layeroffset, insideOnLeftSide[1+h] );
 
 			//, true
 			layeroffset += ahole.length;
@@ -543,10 +536,10 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 
 	}
 
-	function sidewalls( contour, layeroffset, orderCW ) {
+	function sidewalls( contour, layeroffset, insideOnLeftSide ) {
 
 		var j, k;
-		i = contour.length;
+		var i = contour.length;
 
 		while ( --i >= 0 ) {
 
@@ -568,10 +561,10 @@ THREE.ExtrudeGeometry.prototype.addShape = function ( shape, options ) {
 					c = layeroffset + k + slen2,
 					d = layeroffset + j + slen2;
 
-				if ( orderCW )
-					f4( a, b, c, d, contour, s, sl, j, k );
+				if ( insideOnLeftSide )
+					f4( b, a, d, c, contour, s, sl, j, k );
 				else
-					f4( a, d, c, b, contour, s, sl, j, k );
+					f4( a, b, c, d, contour, s, sl, j, k );
 
 			}
 		}

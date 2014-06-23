@@ -43,6 +43,7 @@
 			test('new THREE.TorusGeometry( 50, 20, 8, 8 )', new THREE.TorusGeometry( 50, 20, 8, 8 ));
 			test('new THREE.TorusKnotGeometry( 50, 10, 12, 6 )', new THREE.TorusKnotGeometry( 50, 10, 12, 6 ));
 
+
 			/*
 			Not sure how UVs for ExtrudeGeometry are done currently...
 			*/
@@ -50,19 +51,21 @@
 			var pts = [], starPoints = 5, l;
 			for (i=0; i<starPoints*2;i++) {
 			  if (i%2==1) {
-			    l = 5;
+			    l = 0.1;
 			  } else {
-			    l = 10;
+			    l = 0.2;
 			  }
 
 			  var a = i / starPoints * Math.PI;
-			  pts.push(new THREE.Vector2(Math.cos(a) * l,Math.sin(a) * l ));
+			  pts.push(new THREE.Vector2( 0.3 + Math.cos(a) * l, 0.3 + Math.sin(a) * l ));
 			}
 			var starShape = new THREE.Shape(pts);
-			var extrudeSettings = { amount: 200,  bevelEnabled: true, bevelSegments: 2, steps: 10 }; 
+			var extrudeSettings = { amount: 0.2, bevelEnabled: true, bevelSegments: 2, bevelThickness: 0.08, bevelSize: 0.04, steps: 3 }; 
 
 			test('new THREE.ExtrudeGeometry(starShape, extrudeSettings);', new THREE.ExtrudeGeometry(starShape, extrudeSettings));
 
+
+			// ExtrudeGeometry with CylinderUVGenerator
 			var uvGenerator = new THREE.UVsUtils.CylinderUVGenerator();
 					testShape = setupShape(8, 3);
 					holeShape = setupShape(8, 2);

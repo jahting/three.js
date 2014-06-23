@@ -448,7 +448,7 @@ THREE.Path.prototype.getPoints = function( divisions, closedPath ) {
 //  - definition order CW/CCW has no relevance
 //
 
-THREE.Path.prototype.toShapes = function( isCCW, noHoles ) {
+THREE.Path.prototype.toShapes_OLD = function( isCCW, noHoles ) {
 
 	function extractSubpaths( inActions ) {
 
@@ -673,3 +673,61 @@ THREE.Path.prototype.toShapes = function( isCCW, noHoles ) {
 	return shapes;
 
 };
+
+THREE.Path.prototype.toShapes = function( isCCW, noHoles ) {
+
+	var tmpShape;
+	
+	function addSubpath( inSubPath ) {
+
+		if ( !tmpShape ) {		// 1.SubPath -> Shape
+			tmpShape = new THREE.Shape();
+			tmpShape.actions = inSubPath.actions;
+			tmpShape.curves  = inSubPath.curves;
+		} else {				// other SubPath -> Holes
+			tmpShape.holes.push( inSubPath );
+		}
+	}
+
+
+	var i, il, item, action, args;
+
+	var subPaths = [], lastPath = new THREE.Path();
+
+	for ( i = 0, il = this.actions.length; i < il; i ++ ) {
+
+		item = this.actions[ i ];
+
+		args = item.args;
+		action = item.action;
+
+		if ( action == THREE.PathActions.MOVE_TO ) {
+
+			if ( lastPath.actions.length != 0 ) {
+
+				addSubpath( lastPath );
+				lastPath = new THREE.Path();
+
+			}
+
+		}
+
+		lastPath[ action ].apply( lastPath, args );
+
+	}
+
+	if ( lastPath.actions.length != 0 ) {
+
+		addSubpath( lastPath );
+
+	}
+
+
+	//console.log("shape", tmpShape);
+
+	if ( !tmpShape ) return [];
+
+	return [ tmpShape ];
+
+};
+

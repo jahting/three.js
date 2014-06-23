@@ -20,8 +20,6 @@ THREE.ShapeGeometry = function ( shapes, options ) {
 
 	if ( shapes instanceof Array === false ) shapes = [ shapes ];
 
-	this.shapebb = shapes[ shapes.length - 1 ].getBoundingBox();
-
 	this.addShapeList( shapes, options );
 
 	this.computeFaceNormals();
