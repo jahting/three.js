@@ -42,7 +42,7 @@ PNLTRI.MonoTriangulator.prototype = {
 
 	//	algorithm to triangulate an uni-y-monotone polygon in O(n) time.[FoM84]
 	 
-	triangulate_monotone_polygon: function ( monoPosmax ) {
+	triangulate_monotone_polygon: function ( monoPosmax ) {			// private
 		var scope = this;
 		
 		function error_cleanup() {
@@ -65,7 +65,7 @@ PNLTRI.MonoTriangulator.prototype = {
 		//	and the RHS-case ("RightHandSide segment is a single segment")
 		//	differently by starting at the bottom for LHS and at the top for RHS.
 		// This is not necessary. It can be seen easily, that starting
-		//	from the vertext next to top handles both cases correctly.
+		//	from the vertex next to top handles both cases correctly.
 		//
 
 		var frontMono = monoPosmax.mnext;		// == LHS: YminPoint; RHS: YmaxPoint.mnext

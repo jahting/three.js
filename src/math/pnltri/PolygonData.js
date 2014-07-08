@@ -13,9 +13,10 @@ PNLTRI.PolygonData = function ( inPolygonChainList ) {
 	//  during the subdivision into uni-y-monotone polygons
 	this.vertices = [];
 
-	// list of polygon segments, original and additional ones added
-	//  during the subdivision into uni-y-monotone polygons (s. this.monoSubPolyChains)
-	// doubly linked by: snext, sprev
+	// list of polygon segments, original polygons ane holes
+	//	and additional ones added during the subdivision into
+	//	uni-y-monotone polygons (s. this.monoSubPolyChains)
+	//	doubly linked by: snext, sprev
 	this.segments = [];
 	
 	// for the ORIGINAL polygon chains
@@ -87,16 +88,16 @@ PNLTRI.PolygonData.prototype = {
 	//		yA > yB resp. xA > xB: 1, equal: 0, otherwise: -1
 	compare_pts_yx: function ( inPtA, inPtB ) {
 		var deltaY = inPtA.y - inPtB.y;
-		if ( deltaY > PNLTRI.Math.EPSILON_P ) {
-			return 1;
-		} else if ( deltaY < PNLTRI.Math.EPSILON_N ) {
+		if ( deltaY < PNLTRI.Math.EPSILON_N ) {
 			return -1;
+		} else if ( deltaY > PNLTRI.Math.EPSILON_P ) {
+			return 1;
 		} else {
 			var deltaX = inPtA.x - inPtB.x;
-			if ( deltaX > PNLTRI.Math.EPSILON_P ) {
-				return  1;
-			} else if ( deltaX < PNLTRI.Math.EPSILON_N ) {
+			if ( deltaX < PNLTRI.Math.EPSILON_N ) {
 				return -1;
+			} else if ( deltaX > PNLTRI.Math.EPSILON_P ) {
+				return  1;
 			} else {
 				return  0;
 			}
@@ -116,13 +117,18 @@ PNLTRI.PolygonData.prototype = {
 	
 	/*	Operations  */
 	
-	appendVertexEntry: function ( inVertex ) {			// private
-		var vertex = inVertex ? inVertex : {
-			x: null,		// coordinates
-			y: null,
-			outSegs: [],	// outbound segments (up to 4)
+	appendVertexEntry: function ( inVertexX, inVertexY ) {			// private
+		var vertex = {
+				id: this.vertices.length,	// vertex id, representing input sequence
+				x: inVertexX,				// coordinates
+				y: inVertexY,
+				//
+				//	for performance reasons:
+				//	 initialization of all fields added later
+				//
+				// for monochains
+				outSegs: [],				// outbound segments (up to 4)
 			};
-		vertex.id = this.vertices.length;
 		this.vertices.push( vertex );
 		return	vertex;
 	},
@@ -134,19 +140,27 @@ PNLTRI.PolygonData.prototype = {
 			// end points of segment
 			vFrom: inVertexFrom,	// -> start point entry in vertices
 			vTo: inVertexTo,		// -> end point entry in vertices
-			// upward segment? (i.e. vTo > vFrom)
+			// upward segment? (i.e. vTo > vFrom) !!! only valid for sprev,snext NOT for mprev,mnext !!!
 			upward: ( this.compare_pts_yx(inVertexTo, inVertexFrom) == 1 ),
 			// doubly linked list of original polygon chains (not the monoChains !)
 			sprev: null,			// previous segment
 			snext: null,			// next segment
+			//
+			//	for performance reasons:
+			//	 initialization of all fields added later
+			//
+			// for assigning depth: trapezoids
+			trLeft: null,		// one trapezoid bordering on the left of this segment
+			trRight: null,		// one trapezoid bordering on the right of this segment
+			// for monochains
+			mprev: null,		// doubly linked list for monotone chains (sub-polygons)
+			mnext: null,
+			marked: false,		// already visited during unique monoChain identification ?
 		};
 	},
 	
 	appendSegmentEntry: function ( inSegment ) {				// private
 		this.segments.push( inSegment );
-		if ( this.monoSubPolyChains.length == 0 ) {
-			this.monoSubPolyChains = [ this.segments[0] ];
-		}
 		return	inSegment;
 	},
 	
@@ -161,8 +175,7 @@ PNLTRI.PolygonData.prototype = {
 		var newVertices = [];
 		var newVertex, acceptVertex, prevIdx;
 		for ( var i=0; i < inRawPointList.length; i++ ) {
-			newVertex = this.appendVertexEntry( { x: inRawPointList[i].x,
-												  y: inRawPointList[i].y } );
+			newVertex = this.appendVertexEntry( inRawPointList[i].x, inRawPointList[i].y );
 			// suppresses zero-length segments
 			acceptVertex = true;
 			prevIdx = newVertices.length-1;
@@ -218,163 +231,188 @@ PNLTRI.PolygonData.prototype = {
 		return	this.segments.length - saveSegListLength;
 	},
 
-	
-	// reverse winding order of a polygon chain
-	reverse_polygon_chain: function ( inSomeSegment ) {
-		this.set_PolyLeft_wrong( inSomeSegment.chainId );
-		var tmp, frontSeg = inSomeSegment;
-		do {
-			// change link direction
-			tmp = frontSeg.snext;
-			frontSeg.snext = frontSeg.sprev;
-			frontSeg.sprev = tmp;
-			// exchange vertices
-			tmp = frontSeg.vTo;
-			frontSeg.vTo = frontSeg.vFrom;
-			frontSeg.vFrom = tmp;
-			frontSeg.upward = !frontSeg.upward;
-			// continue with old snext
-			frontSeg = frontSeg.sprev;
-		} while ( frontSeg != inSomeSegment );
-	},
-	
 
 	/* Monotone Polygon Chains */
-	
+
 	initMonoChains: function () {										// <<<<<< public
+		var newMono;
 		// populate links for monoChains and vertex.outSegs
 		for (var i = 0; i < this.segments.length; i++) {
-			// already visited during unique monoChain creation ?
-			this.segments[i].marked = false;
-			// doubly linked list for monotone chains (sub-polygons)
-			this.segments[i].mprev = this.segments[i].sprev;
-			this.segments[i].mnext = this.segments[i].snext;
-			// out-going segments of a vertex (max: 4)
-			this.segments[i].vFrom.outSegs = [ { segOut: this.segments[i],			// first outgoing segment
-												 vertTo: this.segments[i].vTo } ];	// next vertex: other end of outgoing segment
+			newMono = this.segments[i];
+			if ( this.PolyLeftArr[newMono.chainId] ) {
+				// preserve winding order
+				newMono.mprev = newMono.sprev;		// doubly linked list for monotone chains (sub-polygons)
+				newMono.mnext = newMono.snext;
+				// initial out-going monoChain segment of the vertex (max: 4)
+				newMono.vFrom.outSegs.push( {	segOut: newMono,			// -> MonoChainSegment
+												vertTo: newMono.vTo } );	// next vertex: other end of outgoing monoChain segment
+			} else {
+				// reverse winding order
+				newMono = newMono.snext;
+				newMono.mprev = newMono.snext;
+				newMono.mnext = newMono.sprev;
+				newMono.vFrom.outSegs.push( {	segOut: newMono,
+												vertTo: this.segments[i].vFrom } );
+			}
 		}
 	},
 
-	
-	appendVertexOutsegEntry: function ( inVertexFrom, inOutSegEntry ) {
-		var outSegEntry = inOutSegEntry ? inOutSegEntry : {
-			segOut: null,		// -> segments: outgoing segment
-			vertTo: null,		// -> next vertex: other end of outgoing segment
-			};
-		inVertexFrom.outSegs.push( outSegEntry );
-		return	outSegEntry;
+
+	createMonoSegment: function ( inSegment ) {					// private
+		this.appendSegmentEntry( inSegment );				// this.monoArray.push( inSegment );
+		// populate "outgoing segment" from vertices
+		inSegment.vFrom.outSegs.push( {
+				segOut: inSegment,			// -> segments: outgoing segment
+				vertTo: inSegment.vTo,		// -> next vertex: other end of outgoing segment
+			} );
+		return	inSegment;													// this.appendMonoEntry( inSegment );
 	},
 
 
-	// Split the polygon chain (mprev, mnext !) including vert0 and vert1 into
-	// two chains by adding two new segments (vert0, vert1) and (vert0, vert1).
-	// vert0 and vert1 are specified in CCW order with respect to the
-	// current polygon (index: currPoly).
+	newMonoChain: function ( inSegment ) {						// <<<<<< public
+		var newIdx = this.monoSubPolyChains.length;
+		this.monoSubPolyChains[newIdx] = inSegment;
+		return	newIdx;
+	},
+
+
+	// Split the polygon chain (mprev, mnext !) including inVertLow and inVertHigh into
+	// two chains by adding two new segments (inVertLow, inVertHigh) and (inVertHigh, inVertLow).
+	//
+	// This function assumes that all segments have the polygon-"inside" to their left
+	//	that means for contour CCW winding order and for holes CW winding order
+	// This function can also work if all segments have the polygon-"inside" to their right
+	//	(contour: CW, holes: CCW) with the following changes:
+	//	- inverting whether currPoly gets (inVertLow -> inVertHigh) or (inVertHigh -> inVertLow)
+	//	- looking for the outSegs to the left instead of to the right
+	//  The function can work for both cases since the polygon winding order
+	//	 can be detected internally after trapezoidation.
+	//		-- All this can be seen below in previous versions - commented out! --
+	// BUT, if we make no assumption on the polygon winding order of the input
+	//	polygons, we cannot even assume winding order to be consistent between
+	//	contours and holes. Allowing for that would make this function much more
+	//	complicated. So it's easier to change the winding order into a consistent state.
+	// The last step - the triangulatin of the monotone polygons - currently
+	//	also still needs the CCW winding order.
+	//
+	// So if we have to normalize winding order anyway, we can as well define
+	//	'all segments have the polygon-"inside" to their left' as the norm.
+	//
+	// If inVertLow and inVertHigh shall be exchanged, only inCurrPolyLiesToTheLeft
+	//	and the assignments of "upward" have to be inverted.
 	//
 	// returns an index to the new polygon chain.
 
-	splitPolygonChain: function ( currPoly, vert0, vert1 ) {			// <<<<<< public
+	splitPolygonChain: function ( inCurrPolyIdx, inVertLow, inVertHigh, inCurrPolyLiesToTheLeft ) {			// <<<<<< public
 
-		function get_out_segment_next_right_of(vert0, vert1) {
+		// monotone mapping of the CCW angle between the two vectors:
+		//	inPtVertex->inPtFrom and inPtVertex->inPtTo
+		//  from 0..360 degrees onto the range of 0..4
+		//		0..90 -> 0..1, 90..180 -> 1..2, ...
+		// result-curve (looking like an upward stair/wave) is:
+		//	  0 to 180 deg: 1 - cos(theta)
+		//  180 to 360 deg: 2 + cos(theta)    (same shape as for 0-180 but pushed up)
 
-			// monotone mapping of the CCW angle between the wo vectors:
-			//	inPtVertex->inPtFrom and inPtVertex->inPtTo
-			//  from 0..360 degrees onto the range of 0..4
-			// result-curve (looking like an upward stair/wave) is:
-			//	  0 to 180 deg: 1 - cos(theta)
-			//  180 to 360 deg: 2 + cos(theta)    (same shape as for 0-180 but pushed up)
-
-			function mapAngle( inPtVertex, inPtFrom, inPtTo ) {
-			
-				function vectorLength(v0) {		// LENGTH
-					return	Math.sqrt( v0.x * v0.x + v0.y * v0.y );
-				}
-				function dotProd(v0, v1) {
-					// DOT: cos(theta) * len(v0) * len(v1)
-					return	( v0.x * v1.x + v0.y * v1.y );
-				}
-				function crossProd(v0, v1) {
-					// CROSS_SINE: sin(theta) * len(v0) * len(v1)
-					return	( v0.x * v1.y - v1.x * v0.y );
-					// == 0: colinear (theta == 0 or 180 deg == PI rad)
-					// > 0:  v1 lies left of v0, CCW angle from v0 to v1 is convex ( < 180 deg )
-					// < 0:  v1 lies right of v0, CW angle from v0 to v1 is convex ( < 180 deg )
-				}
-				
-				var v0 = {	x: inPtFrom.x - inPtVertex.x,			// Vector inPtVertex->inPtFrom
-							y: inPtFrom.y - inPtVertex.y }
-				var v1 = {	x: inPtTo.x - inPtVertex.x,				// Vector inPtVertex->inPtTo
-							y: inPtTo.y - inPtVertex.y }
-				var cosine = dotProd(v0, v1)/vectorLength(v0)/vectorLength(v1);
-																	// CCW angle from inPtVertex->inPtFrom
-				if ( crossProd(v0, v1) >= 0 )	return 1-cosine;	// to inPtTo <= 180 deg. (convex, to the left)
-				else							return 3+cosine;	// to inPtTo > 180 deg. (concave, to the right)
+		function mapAngle( inPtVertex, inPtFrom, inPtTo ) {
+		
+			function vectorLength(v0) {		// LENGTH
+				return	Math.sqrt( v0.x * v0.x + v0.y * v0.y );
 			}
+			function dotProd(v0, v1) {
+				// DOT: cos(theta) * len(v0) * len(v1)
+				return	( v0.x * v1.x + v0.y * v1.y );
+			}
+			function crossProd(v0, v1) {
+				// CROSS_SINE: sin(theta) * len(v0) * len(v1)
+				return	( v0.x * v1.y - v1.x * v0.y );
+				// == 0: colinear (theta == 0 or 180 deg == PI rad)
+				// > 0:  v1 lies left of v0, CCW angle from v0 to v1 is convex ( < 180 deg )
+				// < 0:  v1 lies right of v0, CW angle from v0 to v1 is convex ( < 180 deg )
+			}
+			
+			var v0 = {	x: inPtFrom.x - inPtVertex.x,			// Vector inPtVertex->inPtFrom
+						y: inPtFrom.y - inPtVertex.y }
+			var v1 = {	x: inPtTo.x - inPtVertex.x,				// Vector inPtVertex->inPtTo
+						y: inPtTo.y - inPtVertex.y }
+			var cosine = dotProd(v0, v1)/vectorLength(v0)/vectorLength(v1);
+																// CCW angle from inPtVertex->inPtFrom
+			if ( crossProd(v0, v1) >= 0 )	return 1-cosine;	// to inPtTo <= 180 deg. (convex, to the left)
+			else							return 3+cosine;	// to inPtTo > 180 deg. (concave, to the right)
+		}
 
+		// search for the outSegment "segNext" so that the CCW angle between
+		//	inVertFrom->segNext.vertTo and inVertFrom->inVertTo is smallest/biggest
+		//	=> inVertFrom->segNext.vertTo is the next to the right/left of inVertFrom->inVertTo
+
+		function get_out_segment_next_right_of( inVertFrom, inVertTo ) {
 
 			var tmpSeg, tmpAngle;
 
-			// search for the outSegment "segRight" so that the angle between
-			//	vert0->segRight.vertTo and vert0->vert1 is smallest
-			//	=> vert0->segRight.vertTo is the next to the right of vert0->vert1
-
-			var segRight = null;
+			var segNext = null;
 			var minAngle = 4.0;			// <=> 360 degrees
-			for (var i = 0; i < vert0.outSegs.length; i++) {
-				tmpSeg = vert0.outSegs[i]
-				if ( ( tmpAngle = mapAngle( vert0, tmpSeg.vertTo, vert1 ) ) < minAngle ) {
+			for (var i = 0; i < inVertFrom.outSegs.length; i++) {
+				tmpSeg = inVertFrom.outSegs[i]
+				if ( ( tmpAngle = mapAngle( inVertFrom, tmpSeg.vertTo, inVertTo ) ) < minAngle ) {
 					minAngle = tmpAngle;
-					segRight = tmpSeg;
+					segNext = tmpSeg;
 				}
 			}
-			return	segRight;
+			return	segNext;
 		}
 
+		// (inVertLow, inVertHigh) is the new diagonal to be added to the polygon.
 
-		// (vert0, vert1) is the new diagonal to be added to the polygon.
+		// To keep polygon winding order consistent currPoly gets
+		//	(inVertLow -> inVertHigh) or (inVertHigh -> inVertLow) depending on this existing
+		//	winding order and on the side of (inVertLow, inVertHigh) where currPoly lies
+		var currPoly_gets_newSegLow2High;
 
-		// find chains and outSegs to use for vert0 and vert1
-		var vert0outSeg = get_out_segment_next_right_of(vert0, vert1);
-		var vert1outSeg = get_out_segment_next_right_of(vert1, vert0);
-		
-		var segOutFromVert0 = vert0outSeg.segOut;
-		var segOutFromVert1 = vert1outSeg.segOut;
-		
+		// find the outSegs from inVertLow and inVertHigh which belong to the chain split by the new diagonal
+		var vertLowOutSeg, vertHighOutSeg;
+
+		currPoly_gets_newSegLow2High = inCurrPolyLiesToTheLeft;
+		vertLowOutSeg  = get_out_segment_next_right_of( inVertLow, inVertHigh );
+		vertHighOutSeg = get_out_segment_next_right_of( inVertHigh, inVertLow );
+
+		var segOutFromVertLow  = vertLowOutSeg.segOut;
+		var segOutFromVertHigh = vertHighOutSeg.segOut;
+
+		// create new segments
+		var newSegLow2High = this.createMonoSegment( { vFrom: inVertLow, vTo: inVertHigh, upward: true,	// upward,
+								mprev: segOutFromVertLow.mprev, mnext: segOutFromVertHigh } );
+		var newSegHigh2Low = this.createMonoSegment( { vFrom: inVertHigh, vTo: inVertLow, upward: false,	// !upward,
+								mprev: segOutFromVertHigh.mprev, mnext: segOutFromVertLow } );
+
 		// modify linked lists
-		var upward = ( this.compare_pts_yx(vert0, vert1) == 1 );
-		var newSegPolyOrg = this.appendSegmentEntry( { vFrom: vert0, vTo: vert1, upward: !upward,
-							mprev: segOutFromVert0.mprev, mnext: segOutFromVert1 } );
-		var newSegPolyNew = this.appendSegmentEntry( { vFrom: vert1, vTo: vert0, upward: upward,
-							mprev: segOutFromVert1.mprev, mnext: segOutFromVert0 } );
-		
-		segOutFromVert0.mprev.mnext = newSegPolyOrg;
-		segOutFromVert1.mprev.mnext = newSegPolyNew;
-		
-		segOutFromVert0.mprev = newSegPolyNew;
-		segOutFromVert1.mprev = newSegPolyOrg;
-		
-		// populate "outgoing segment" from vertices
-		this.appendVertexOutsegEntry( vert0, { segOut: newSegPolyOrg, vertTo: vert1 } );
-		this.appendVertexOutsegEntry( vert1, { segOut: newSegPolyNew, vertTo: vert0 } );
+		segOutFromVertLow.mprev.mnext  = newSegLow2High;
+		segOutFromVertHigh.mprev.mnext = newSegHigh2Low;
 
-		this.monoSubPolyChains[currPoly] = segOutFromVert1;		// initially creates [0] on empty list !!
-		this.monoSubPolyChains.push(segOutFromVert0);
-		
-		return	this.monoSubPolyChains.length - 1;				// index -> new monoSubPoly
+		segOutFromVertLow.mprev  = newSegHigh2Low;
+		segOutFromVertHigh.mprev = newSegLow2High;
+
+		// add new segments to correct polygon chain to preserve winding order
+		var newPolyIdx = this.monoSubPolyChains.length;
+		if ( currPoly_gets_newSegLow2High ) {
+			this.monoSubPolyChains[inCurrPolyIdx] = newSegLow2High;
+			this.monoSubPolyChains[   newPolyIdx] = newSegHigh2Low;
+		} else {
+			this.monoSubPolyChains[inCurrPolyIdx] = newSegHigh2Low;
+			this.monoSubPolyChains[   newPolyIdx] = newSegLow2High;
+		}
+
+		return	newPolyIdx;
 	},
-	
+
 	// For each monotone polygon, find the ymax (to determine the two
 	// y-monotone chains) and skip duplicate monotone polygons
-	
+
 	unique_monotone_chains_max: function () {		// private
 		var frontMono, monoPosmax;
 		var frontPt, firstPt, ymaxPt;
-		
-		var i;
-		for ( i=0; i<this.segments.length; i++ ) { this.segments[i].marked = false; }
-		
+
+		// assumes attribute "marked" is NOT yet "true" for any mono chain segment
 		var	uniqueMonoChainsMax = [];
-		for ( i=0; i<this.monoSubPolyChains.length; i++ ) {
+		for ( var i=0; i<this.monoSubPolyChains.length; i++ ) {
 			// loop through uni-monotone chains
 			frontMono = monoPosmax = this.monoSubPolyChains[i];
 			firstPt = ymaxPt = frontMono.vFrom;
@@ -401,22 +439,22 @@ PNLTRI.PolygonData.prototype = {
 		}
 		return	uniqueMonoChainsMax;
 	},
-	
+
 	normalize_monotone_chains: function () {			// <<<<<< public
 		this.monoSubPolyChains = this.unique_monotone_chains_max();
 		return	this.monoSubPolyChains.length;
 	},
 
-	
+
 	/* Triangles */
-	
+
 	clearTriangles: function () {
 		this.triangles = [];
 	},
-	
+
 	addTriangle: function ( inVert1, inVert2, inVert3 ) {
 		this.triangles.push( [ inVert1.id, inVert2.id, inVert3.id ] );
 	},
-	
+
 };
 

@@ -38,19 +38,13 @@ PNLTRI.MonoSplitter.prototype = {
 				
 		// Generate the uni-y-monotone sub-polygons from
 		//	the trapezoidation of the polygon.
-		//	!!  for the start triangle trapezoid it doesn't matter
-		//	!!	from where we claim to enter it
 		this.polyData.initMonoChains();
 		
-		var curChain = 0;
 		var curStart = this.startTrap;
 		while (curStart) {
-			this.polyData.monoSubPolyChains[curChain] = curStart.lseg;
-			this.alyTrap( curChain, curStart, null, null, null );
-			if ( curStart = this.trapezoider.find_first_inside() ) {
-				// console.log("another Polygon");
-				curChain = this.polyData.monoSubPolyChains.length;
-			}
+			this.alyTrap(	this.polyData.newMonoChain( curStart.lseg ),
+							curStart, null, null, null );
+			curStart = this.trapezoider.find_first_inside();
 		};
 
 		// return number of UNIQUE sub-polygons created
@@ -59,17 +53,13 @@ PNLTRI.MonoSplitter.prototype = {
 
 	
 	// Splits the current polygon (index: inCurrPoly) into two sub-polygons
-	//	using the diagonal (inVertLow, inVertHigh) either from low to high or high to low
+	//	using the diagonal (inVertLow, inVertHigh) either from low to high or high to low		// TODO: new explanation
 	// returns an index to the new sub-polygon
 	//
 	//	!! public for Mock-Tests only !!
 
-	doSplit: function ( inChain, inVertLow, inVertHigh, inLow2High ) {
-		if ( inLow2High ) {
-			return this.polyData.splitPolygonChain( inChain, inVertLow, inVertHigh );
-		} else {
-			return this.polyData.splitPolygonChain( inChain, inVertHigh, inVertLow );
-		}
+	doSplit: function ( inChain, inVertLow, inVertHigh, inLow2High ) {				// private
+		return this.polyData.splitPolygonChain( inChain, inVertLow, inVertHigh, inLow2High );
 	},
 
 	// In a loop analyses all connected trapezoids for possible splitting diagonals
@@ -78,7 +68,7 @@ PNLTRI.MonoSplitter.prototype = {
 	//		lseg: always goes downwards
 	//	This is preserved during the splitting.
 		
-	alyTrap: function ( inChain, inTrap, inFromUp, inFromLeft, inOneStep ) {
+	alyTrap: function ( inChain, inTrap, inFromUp, inFromLeft, inOneStep ) {		// private
 
 		var trapQueue = [];
 		var thisTrap, fromUp, fromLeft, curChain, newChain;
@@ -115,7 +105,8 @@ PNLTRI.MonoSplitter.prototype = {
 		trapList_addItem( inTrap, inFromUp, inFromLeft, inChain );
 		
 		while ( trapList_getItem() ) {
-			if ( thisTrap.monoDiag )	continue;
+			if ( thisTrap.monoDone )	continue;
+			thisTrap.monoDone = true;
 		
 			if ( !thisTrap.lseg || !thisTrap.rseg ) {
 				console.log("ERR alyTrap: lseg/rseg missing", thisTrap);
@@ -159,9 +150,9 @@ PNLTRI.MonoSplitter.prototype = {
 				// console.log( "1 neighbor on in-Side, 1 on same L/R-side or none on the other => no split possible" );
 			}
 
-			trapList_addItem( neighAcross, fromUp, !fromLeft, newChain );
+			trapList_addItem( neighAcross,  fromUp, !fromLeft, newChain );
 			trapList_addItem( neighSameUD, !fromUp, !fromLeft, newChain );
-			trapList_addItem( neighSameLR, fromUp, fromLeft, curChain );
+			trapList_addItem( neighSameLR,  fromUp,  fromLeft, curChain );
 
 			if ( !neighSameLR && !neighAcross ) {
 				// TLR_BL, TLR_BR; TL_BLR, TR_BLR,    TLR_BM, TM_BLR
@@ -169,8 +160,6 @@ PNLTRI.MonoSplitter.prototype = {
 				//	could be start triangle -> visit IN-neighbor in any case !
 				trapList_addItem( neighIn, !fromUp, fromLeft, curChain );
 			}
-			
-			thisTrap.monoDiag = true;
 
 			if ( inOneStep )	return trapQueue;
 		}
