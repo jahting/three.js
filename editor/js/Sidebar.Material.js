@@ -131,10 +131,21 @@ Sidebar.Material = function ( editor ) {
 
 	container.add( materialShininessRow );
 
+	// uniforms
+
+	var materialUniformsRow = new UI.Panel();
+	var materialUniforms = new UI.TextArea().setWidth( '150px' ).setHeight( '80px' );
+	materialUniforms.setValue( '{\n  "uColor": {\n    "type": "3f",\n    "value": [1, 0, 0]\n  }\n}' ).onChange( update );
+
+	materialUniformsRow.add( new UI.Text( 'Uniforms' ).setWidth( '90px' ) );
+	materialUniformsRow.add( materialUniforms );
+
+	container.add( materialUniformsRow );
+
 	// vertex shader
 
 	var materialVertexShaderRow = new UI.Panel();
-	var materialVertexShader = new UI.TextArea().setWidth( '150px' ).setHeight( '40px' );
+	var materialVertexShader = new UI.TextArea().setWidth( '150px' ).setHeight( '80px' );
 	materialVertexShader.setValue( 'void main() {\n\tgl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n}' ).onChange( update );
 
 	materialVertexShaderRow.add( new UI.Text( 'Vertex Shader' ).setWidth( '90px' ) );
@@ -145,8 +156,8 @@ Sidebar.Material = function ( editor ) {
 	// fragment shader
 
 	var materialFragmentShaderRow = new UI.Panel();
-	var materialFragmentShader = new UI.TextArea().setWidth( '150px' ).setHeight( '40px' );
-	materialFragmentShader.setValue( 'void main() {\n\tgl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );\n}' ).onChange( update );
+	var materialFragmentShader = new UI.TextArea().setWidth( '150px' ).setHeight( '80px' );
+	materialFragmentShader.setValue( 'uniform vec3 uColor;\n\nvoid main() {\n\tgl_FragColor = vec4( uColor, 1.0 );\n}' ).onChange( update );
 
 	materialFragmentShaderRow.add( new UI.Text( 'Fragment Shader' ).setWidth( '90px' ) );
 	materialFragmentShaderRow.add( materialFragmentShader );
@@ -381,6 +392,12 @@ Sidebar.Material = function ( editor ) {
 
 			}
 
+			if ( material.uniforms !== undefined ) {
+
+				material.uniforms = JSON.parse( materialUniforms.getValue() );
+
+			}
+
 			if ( material.vertexShader !== undefined ) {
 
 				material.vertexShader = materialVertexShader.getValue();
@@ -596,6 +613,7 @@ Sidebar.Material = function ( editor ) {
 			'emissive': materialEmissiveRow,
 			'specular': materialSpecularRow,
 			'shininess': materialShininessRow,
+			'uniforms': materialUniformsRow,
 			'vertexShader': materialVertexShaderRow,
 			'fragmentShader': materialFragmentShaderRow,
 			'vertexColors': materialVertexColorsRow,
@@ -674,6 +692,12 @@ Sidebar.Material = function ( editor ) {
 			if ( material.shininess !== undefined ) {
 
 				materialShininess.setValue( material.shininess );
+
+			}
+
+			if ( material.uniforms !== undefined ) {
+
+				materialUniforms.setValue( JSON.stringify( material.uniforms, null, '  ' ) );
 
 			}
 
