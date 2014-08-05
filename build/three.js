@@ -7450,22 +7450,6 @@ THREE.Object3D.prototype = {
 
 			this.children.push( object );
 
-			// add to scene
-
-			var scene = this;
-
-			while ( scene.parent !== undefined ) {
-
-				scene = scene.parent;
-
-			}
-
-			if ( scene !== undefined && scene instanceof THREE.Scene )  {
-
-				scene.__addObject( object );
-
-			}
-
 		} else {
 		
 			console.error( "THREE.Object3D.add:", object, "is not an instance of THREE.Object3D." );
@@ -7496,22 +7480,6 @@ THREE.Object3D.prototype = {
 			object.dispatchEvent( { type: 'removed' } );
 
 			this.children.splice( index, 1 );
-
-			// remove from scene
-
-			var scene = this;
-
-			while ( scene.parent !== undefined ) {
-
-				scene = scene.parent;
-
-			}
-
-			if ( scene !== undefined && scene instanceof THREE.Scene ) {
-
-				scene.__removeObject( object );
-
-			}
 
 		}
 
@@ -7696,6 +7664,12 @@ THREE.Object3D.prototype = {
 		}
 
 		return object;
+
+	},
+
+	dispose: function () {
+
+		this.dispatchEvent( { type: 'dispose' } );
 
 	}
 
@@ -9033,80 +9007,48 @@ THREE.BufferGeometry.prototype = {
 
 	computeBoundingBox: function () {
 
-		if ( this.boundingBox === null ) {
+		var vector = new THREE.Vector3();
 
-			this.boundingBox = new THREE.Box3();
+		return function () {
 
-		}
+			if ( this.boundingBox === null ) {
 
-		var positions = this.attributes[ 'position' ].array;
+				this.boundingBox = new THREE.Box3();
 
-		if ( positions ) {
-
-			var bb = this.boundingBox;
-
-			if ( positions.length >= 3 ) {
-				bb.min.x = bb.max.x = positions[ 0 ];
-				bb.min.y = bb.max.y = positions[ 1 ];
-				bb.min.z = bb.max.z = positions[ 2 ];
 			}
 
-			for ( var i = 3, il = positions.length; i < il; i += 3 ) {
+			var positions = this.attributes[ 'position' ].array;
 
-				var x = positions[ i ];
-				var y = positions[ i + 1 ];
-				var z = positions[ i + 2 ];
+			if ( positions ) {
 
-				// bounding box
+				var bb = this.boundingBox;
+				bb.makeEmpty();
 
-				if ( x < bb.min.x ) {
+				for ( var i = 0, il = positions.length; i < il; i += 3 ) {
 
-					bb.min.x = x;
-
-				} else if ( x > bb.max.x ) {
-
-					bb.max.x = x;
-
-				}
-
-				if ( y < bb.min.y ) {
-
-					bb.min.y = y;
-
-				} else if ( y > bb.max.y ) {
-
-					bb.max.y = y;
-
-				}
-
-				if ( z < bb.min.z ) {
-
-					bb.min.z = z;
-
-				} else if ( z > bb.max.z ) {
-
-					bb.max.z = z;
+					vector.set( positions[ i ], positions[ i + 1 ], positions[ i + 2 ] );
+					bb.expandByPoint( vector );
 
 				}
 
 			}
 
+			if ( positions === undefined || positions.length === 0 ) {
+
+				this.boundingBox.min.set( 0, 0, 0 );
+				this.boundingBox.max.set( 0, 0, 0 );
+
+			}
+
+			if ( isNaN( this.boundingBox.min.x ) || isNaN( this.boundingBox.min.y ) || isNaN( this.boundingBox.min.z ) ) {
+
+				console.error( 'THREE.BufferGeometry.computeBoundingBox: Computed min/max have NaN values. The "position" attribute is likely to have NaN values.' );
+
+			}
+
 		}
 
-		if ( positions === undefined || positions.length === 0 ) {
-
-			this.boundingBox.min.set( 0, 0, 0 );
-			this.boundingBox.max.set( 0, 0, 0 );
-
-		}
-
-		if ( isNaN( this.boundingBox.min.x ) || isNaN( this.boundingBox.min.y ) || isNaN( this.boundingBox.min.z ) ) {
-
-			console.error( 'THREE.BufferGeometry.computeBoundingBox: Computed min/max have NaN values. The "position" attribute is likely to have NaN values.' );
-
-		}
-
-	},
+	}(),
 
 	computeBoundingSphere: function () {
 
@@ -12937,6 +12879,12 @@ THREE.ObjectLoader.prototype = {
 
 					break;
 
+				case 'Group':
+
+					object = new THREE.Group();
+
+					break;
+
 				default:
 
 					object = new THREE.Object3D();
@@ -13061,8 +13009,6 @@ THREE.Material = function () {
 
 	this.overdraw = 0; // Overdrawn pixels (typically between 0 and 1) for fixing antialiasing gaps in CanvasRenderer
 
-	this.visible = true;
-
 	this.needsUpdate = true;
 
 };
@@ -13142,8 +13088,6 @@ THREE.Material.prototype = {
 		material.alphaTest = this.alphaTest;
 
 		material.overdraw = this.overdraw;
-
-		material.visible = this.visible;
 
 		return material;
 
@@ -14342,6 +14286,20 @@ THREE.DataTexture.prototype.clone = function () {
 
 };
 
+// File:src/objects/Group.js
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+THREE.Group = function () {
+
+	THREE.Object3D.call( this );
+
+};
+
+THREE.Group.prototype = Object.create( THREE.Object3D.prototype );
+
 // File:src/objects/PointCloud.js
 
 /**
@@ -14981,25 +14939,9 @@ THREE.Bone = function ( belongsToSkin ) {
 
 	this.skin = belongsToSkin;
 
-	this.accumulatedRotWeight = 0;
-	this.accumulatedPosWeight = 0;
-	this.accumulatedSclWeight = 0;
-
 };
 
 THREE.Bone.prototype = Object.create( THREE.Object3D.prototype );
-
-THREE.Bone.prototype.updateMatrixWorld = function ( force ) {
-
-	THREE.Object3D.prototype.updateMatrixWorld.call( this, force );
-
-	// Reset weights to be re-accumulated in the next frame
-
-	this.accumulatedRotWeight = 0;
-	this.accumulatedPosWeight = 0;
-	this.accumulatedSclWeight = 0;
-
-};
 
 
 // File:src/objects/Skeleton.js
@@ -15142,8 +15084,7 @@ THREE.Skeleton.prototype.pose = function () {
 				bone.matrix.getInverse( bone.parent.matrixWorld );
 				bone.matrix.multiply( bone.matrixWorld );
 
-			}
-			else {
+			} else {
 
 				bone.matrix.copy( bone.matrixWorld );
 
@@ -15157,30 +15098,34 @@ THREE.Skeleton.prototype.pose = function () {
 
 };
 
-THREE.Skeleton.prototype.update = function () {
+THREE.Skeleton.prototype.update = ( function () {
 
 	var offsetMatrix = new THREE.Matrix4();
+	
+	return function () {
 
-	// flatten bone matrices to array
+		// flatten bone matrices to array
 
-	for ( var b = 0, bl = this.bones.length; b < bl; b ++ ) {
+		for ( var b = 0, bl = this.bones.length; b < bl; b ++ ) {
 
-		// compute the offset between the current and the original transform
+			// compute the offset between the current and the original transform
 
-		var matrix = this.bones[ b ] ? this.bones[ b ].matrixWorld : this.identityMatrix;
+			var matrix = this.bones[ b ] ? this.bones[ b ].matrixWorld : this.identityMatrix;
 
-		offsetMatrix.multiplyMatrices( matrix, this.boneInverses[ b ] );
-		offsetMatrix.flattenToArrayOffset( this.boneMatrices, b * 16 );
+			offsetMatrix.multiplyMatrices( matrix, this.boneInverses[ b ] );
+			offsetMatrix.flattenToArrayOffset( this.boneMatrices, b * 16 );
 
-	}
+		}
 
-	if ( this.useVertexTexture ) {
+		if ( this.useVertexTexture ) {
 
-		this.boneTexture.needsUpdate = true;
+			this.boneTexture.needsUpdate = true;
 
-	}
+		}
+		
+	};
 
-};
+} )();
 
 
 // File:src/objects/SkinnedMesh.js
@@ -15707,10 +15652,14 @@ THREE.LOD.prototype.clone = function ( object ) {
 
 THREE.Sprite = ( function () {
 
-	var vertices = new Float32Array( [ - 0.5, - 0.5, 0, 0.5, - 0.5, 0, 0.5, 0.5, 0 ] );
+	var indices = new Uint16Array( [ 0, 1, 2,  0, 2, 3 ] );
+	var vertices = new Float32Array( [ - 0.5, - 0.5, 0,   0.5, - 0.5, 0,   0.5, 0.5, 0,   - 0.5, 0.5, 0 ] );
+	var uvs = new Float32Array( [ 0, 0,   1, 0,   1, 1,   0, 1 ] );
 
 	var geometry = new THREE.BufferGeometry();
+	geometry.addAttribute( 'index', new THREE.BufferAttribute( indices, 1 ) );
 	geometry.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+	geometry.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 
 	return function ( material ) {
 
@@ -15754,14 +15703,6 @@ THREE.Sprite.prototype.raycast = ( function () {
 
 }() );
 
-THREE.Sprite.prototype.updateMatrix = function () {
-
-	this.matrix.compose( this.position, this.quaternion, this.scale );
-
-	this.matrixWorldNeedsUpdate = true;
-
-};
-
 THREE.Sprite.prototype.clone = function ( object ) {
 
 	if ( object === undefined ) object = new THREE.Sprite( this.material );
@@ -15792,106 +15733,9 @@ THREE.Scene = function () {
 	this.autoUpdate = true; // checked by the renderer
 	this.matrixAutoUpdate = false;
 
-	this.__lights = [];
-
-	this.__objectsAdded = [];
-	this.__objectsRemoved = [];
-
 };
 
 THREE.Scene.prototype = Object.create( THREE.Object3D.prototype );
-
-THREE.Scene.prototype.__addObject = function ( object ) {
-
-	if ( object instanceof THREE.Light ) {
-
-		if ( this.__lights.indexOf( object ) === - 1 ) {
-
-			this.__lights.push( object );
-
-		}
-
-		if ( object.target && object.target.parent === undefined ) {
-
-			this.add( object.target );
-
-		}
-
-	} else if ( ! ( object instanceof THREE.Camera || object instanceof THREE.Bone ) ) {
-
-		this.__objectsAdded.push( object );
-
-		// check if previously removed
-
-		var i = this.__objectsRemoved.indexOf( object );
-
-		if ( i !== - 1 ) {
-
-			this.__objectsRemoved.splice( i, 1 );
-
-		}
-
-	}
-
-	this.dispatchEvent( { type: 'objectAdded', object: object } );
-	object.dispatchEvent( { type: 'addedToScene', scene: this } );
-
-	for ( var c = 0; c < object.children.length; c ++ ) {
-
-		this.__addObject( object.children[ c ] );
-
-	}
-
-};
-
-THREE.Scene.prototype.__removeObject = function ( object ) {
-
-	if ( object instanceof THREE.Light ) {
-
-		var i = this.__lights.indexOf( object );
-
-		if ( i !== - 1 ) {
-
-			this.__lights.splice( i, 1 );
-
-		}
-
-		if ( object.shadowCascadeArray ) {
-
-			for ( var x = 0; x < object.shadowCascadeArray.length; x ++ ) {
-
-				this.__removeObject( object.shadowCascadeArray[ x ] );
-
-			}
-
-		}
-
-	} else if ( ! ( object instanceof THREE.Camera ) ) {
-
-		this.__objectsRemoved.push( object );
-
-		// check if previously added
-
-		var i = this.__objectsAdded.indexOf( object );
-
-		if ( i !== - 1 ) {
-
-			this.__objectsAdded.splice( i, 1 );
-
-		}
-
-	}
-
-	this.dispatchEvent( { type: 'objectRemoved', object: object } );
-	object.dispatchEvent( { type: 'removedFromScene', scene: this } );
-
-	for ( var c = 0; c < object.children.length; c ++ ) {
-
-		this.__removeObject( object.children[ c ] );
-
-	}
-
-};
 
 THREE.Scene.prototype.clone = function ( object ) {
 
@@ -17080,7 +16924,7 @@ THREE.ShaderChunk[ 'morphnormal_vertex'] = "#ifdef USE_MORPHNORMALS\n\n	vec3 mor
 
 // File:src/renderers/shaders/ShaderChunk/envmap_pars_fragment.glsl
 
-THREE.ShaderChunk[ 'envmap_pars_fragment'] = "#ifdef USE_ENVMAP\n\n	uniform float reflectivity;\n	uniform samplerCube envMap;\n	uniform float flipEnvMap;\n	uniform int combine;\n\n	#if defined( USE_BUMPMAP ) || defined( USE_NORMALMAP )\n\n		uniform bool useRefract;\n		uniform float refractionRatio;\n\n	#else\n\n		varying vec3 vReflect;\n\n	#endif\n\n#endif";
+THREE.ShaderChunk[ 'envmap_pars_fragment'] = "#ifdef USE_ENVMAP\n\n	uniform float reflectivity;\n	uniform samplerCube envMap;\n	uniform float flipEnvMap;\n	uniform int combine;\n\n	#if defined( USE_BUMPMAP ) || defined( USE_NORMALMAP ) || defined( PHONG )\n\n		uniform bool useRefract;\n		uniform float refractionRatio;\n\n	#else\n\n		varying vec3 vReflect;\n\n	#endif\n\n#endif";
 
 // File:src/renderers/shaders/ShaderChunk/logdepthbuf_fragment.glsl
 
@@ -17132,7 +16976,7 @@ THREE.ShaderChunk[ 'skinning_vertex'] = "#ifdef USE_SKINNING\n\n	#ifdef USE_MORP
 
 // File:src/renderers/shaders/ShaderChunk/envmap_pars_vertex.glsl
 
-THREE.ShaderChunk[ 'envmap_pars_vertex'] = "#if defined( USE_ENVMAP ) && ! defined( USE_BUMPMAP ) && ! defined( USE_NORMALMAP )\n\n	varying vec3 vReflect;\n\n	uniform float refractionRatio;\n	uniform bool useRefract;\n\n#endif\n";
+THREE.ShaderChunk[ 'envmap_pars_vertex'] = "#if defined( USE_ENVMAP ) && ! defined( USE_BUMPMAP ) && ! defined( USE_NORMALMAP ) && ! defined( PHONG )\n\n	varying vec3 vReflect;\n\n	uniform float refractionRatio;\n	uniform bool useRefract;\n\n#endif\n";
 
 // File:src/renderers/shaders/ShaderChunk/linear_to_gamma_fragment.glsl
 
@@ -17152,7 +16996,7 @@ THREE.ShaderChunk[ 'map_pars_vertex'] = "#if defined( USE_MAP ) || defined( USE_
 
 // File:src/renderers/shaders/ShaderChunk/envmap_fragment.glsl
 
-THREE.ShaderChunk[ 'envmap_fragment'] = "#ifdef USE_ENVMAP\n\n	vec3 reflectVec;\n\n	#if defined( USE_BUMPMAP ) || defined( USE_NORMALMAP )\n\n		vec3 cameraToVertex = normalize( vWorldPosition - cameraPosition );\n\n		// http://en.wikibooks.org/wiki/GLSL_Programming/Applying_Matrix_Transformations\n		// Transforming Normal Vectors with the Inverse Transformation\n\n		vec3 worldNormal = normalize( vec3( vec4( normal, 0.0 ) * viewMatrix ) );\n\n		if ( useRefract ) {\n\n			reflectVec = refract( cameraToVertex, worldNormal, refractionRatio );\n\n		} else { \n\n			reflectVec = reflect( cameraToVertex, worldNormal );\n\n		}\n\n	#else\n\n		reflectVec = vReflect;\n\n	#endif\n\n	#ifdef DOUBLE_SIDED\n\n		float flipNormal = ( -1.0 + 2.0 * float( gl_FrontFacing ) );\n		vec4 cubeColor = textureCube( envMap, flipNormal * vec3( flipEnvMap * reflectVec.x, reflectVec.yz ) );\n\n	#else\n\n		vec4 cubeColor = textureCube( envMap, vec3( flipEnvMap * reflectVec.x, reflectVec.yz ) );\n\n	#endif\n\n	#ifdef GAMMA_INPUT\n\n		cubeColor.xyz *= cubeColor.xyz;\n\n	#endif\n\n	if ( combine == 1 ) {\n\n		gl_FragColor.xyz = mix( gl_FragColor.xyz, cubeColor.xyz, specularStrength * reflectivity );\n\n	} else if ( combine == 2 ) {\n\n		gl_FragColor.xyz += cubeColor.xyz * specularStrength * reflectivity;\n\n	} else {\n\n		gl_FragColor.xyz = mix( gl_FragColor.xyz, gl_FragColor.xyz * cubeColor.xyz, specularStrength * reflectivity );\n\n	}\n\n#endif";
+THREE.ShaderChunk[ 'envmap_fragment'] = "#ifdef USE_ENVMAP\n\n	vec3 reflectVec;\n\n	#if defined( USE_BUMPMAP ) || defined( USE_NORMALMAP ) || defined( PHONG )\n\n		vec3 cameraToVertex = normalize( vWorldPosition - cameraPosition );\n\n		// http://en.wikibooks.org/wiki/GLSL_Programming/Applying_Matrix_Transformations\n		// Transforming Normal Vectors with the Inverse Transformation\n\n		vec3 worldNormal = normalize( vec3( vec4( normal, 0.0 ) * viewMatrix ) );\n\n		if ( useRefract ) {\n\n			reflectVec = refract( cameraToVertex, worldNormal, refractionRatio );\n\n		} else { \n\n			reflectVec = reflect( cameraToVertex, worldNormal );\n\n		}\n\n	#else\n\n		reflectVec = vReflect;\n\n	#endif\n\n	#ifdef DOUBLE_SIDED\n\n		float flipNormal = ( -1.0 + 2.0 * float( gl_FrontFacing ) );\n		vec4 cubeColor = textureCube( envMap, flipNormal * vec3( flipEnvMap * reflectVec.x, reflectVec.yz ) );\n\n	#else\n\n		vec4 cubeColor = textureCube( envMap, vec3( flipEnvMap * reflectVec.x, reflectVec.yz ) );\n\n	#endif\n\n	#ifdef GAMMA_INPUT\n\n		cubeColor.xyz *= cubeColor.xyz;\n\n	#endif\n\n	if ( combine == 1 ) {\n\n		gl_FragColor.xyz = mix( gl_FragColor.xyz, cubeColor.xyz, specularStrength * reflectivity );\n\n	} else if ( combine == 2 ) {\n\n		gl_FragColor.xyz += cubeColor.xyz * specularStrength * reflectivity;\n\n	} else {\n\n		gl_FragColor.xyz = mix( gl_FragColor.xyz, gl_FragColor.xyz * cubeColor.xyz, specularStrength * reflectivity );\n\n	}\n\n#endif";
 
 // File:src/renderers/shaders/ShaderChunk/specularmap_pars_fragment.glsl
 
@@ -17212,7 +17056,7 @@ THREE.ShaderChunk[ 'morphtarget_vertex'] = "#ifdef USE_MORPHTARGETS\n\n	vec3 mor
 
 // File:src/renderers/shaders/ShaderChunk/envmap_vertex.glsl
 
-THREE.ShaderChunk[ 'envmap_vertex'] = "#if defined( USE_ENVMAP ) && ! defined( USE_BUMPMAP ) && ! defined( USE_NORMALMAP )\n\n	vec3 worldNormal = mat3( modelMatrix[ 0 ].xyz, modelMatrix[ 1 ].xyz, modelMatrix[ 2 ].xyz ) * objectNormal;\n	worldNormal = normalize( worldNormal );\n\n	vec3 cameraToVertex = normalize( worldPosition.xyz - cameraPosition );\n\n	if ( useRefract ) {\n\n		vReflect = refract( cameraToVertex, worldNormal, refractionRatio );\n\n	} else {\n\n		vReflect = reflect( cameraToVertex, worldNormal );\n\n	}\n\n#endif";
+THREE.ShaderChunk[ 'envmap_vertex'] = "#if defined( USE_ENVMAP ) && ! defined( USE_BUMPMAP ) && ! defined( USE_NORMALMAP ) && ! defined( PHONG )\n\n	vec3 worldNormal = mat3( modelMatrix[ 0 ].xyz, modelMatrix[ 1 ].xyz, modelMatrix[ 2 ].xyz ) * objectNormal;\n	worldNormal = normalize( worldNormal );\n\n	vec3 cameraToVertex = normalize( worldPosition.xyz - cameraPosition );\n\n	if ( useRefract ) {\n\n		vReflect = refract( cameraToVertex, worldNormal, refractionRatio );\n\n	} else {\n\n		vReflect = reflect( cameraToVertex, worldNormal );\n\n	}\n\n#endif";
 
 // File:src/renderers/shaders/ShaderChunk/shadowmap_fragment.glsl
 
@@ -17713,6 +17557,8 @@ THREE.ShaderLib = {
 		].join("\n"),
 
 		fragmentShader: [
+
+			"#define PHONG",
 
 			"uniform vec3 diffuse;",
 			"uniform float opacity;",
@@ -18779,6 +18625,11 @@ THREE.WebGLRenderer = function ( parameters ) {
 	_clearColor = new THREE.Color( 0x000000 ),
 	_clearAlpha = 0;
 	
+	var lights = [];
+	
+	var _webglObjects = {};
+	var _webglObjectsImmediate = [];
+	
 	var opaqueObjects = [];
 	var transparentObjects = [];
 
@@ -19158,14 +19009,14 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.addPostPlugin = function ( plugin ) {
 
-		plugin.init( this );
+		plugin.init( this, lights, _webglObjects, _webglObjectsImmediate );
 		this.renderPluginsPost.push( plugin );
 
 	};
 
 	this.addPrePlugin = function ( plugin ) {
 
-		plugin.init( this );
+		plugin.init( this, lights, _webglObjects, _webglObjectsImmediate );
 		this.renderPluginsPre.push( plugin );
 
 	};
@@ -19183,8 +19034,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_lightsNeedUpdate = true;
 		_oldDoubleSided = - 1;
 		_oldFlipSided = - 1;
-
-		initObjects( scene );
 
 		this.shadowMapPlugin.update( scene, camera );
 
@@ -19259,6 +19108,16 @@ THREE.WebGLRenderer = function ( parameters ) {
 	};
 
 	// Events
+	
+	var onObjectDispose = function ( event ) {
+
+		var object = event.target;
+
+		object.removeEventListener( 'dispose', onObjectDispose );
+
+		removeObject( object )
+
+	};
 
 	var onGeometryDispose = function ( event ) {
 
@@ -19597,47 +19456,22 @@ THREE.WebGLRenderer = function ( parameters ) {
 			ntris     = faces3.length * 1,
 			nlines    = faces3.length * 3,
 
-			material = getBufferMaterial( object, geometryGroup ),
-
-			uvType = bufferGuessUVType( material ),
-			normalType = bufferGuessNormalType( material ),
-			vertexColorType = bufferGuessVertexColorType( material );
-
-		// console.log( "uvType", uvType, "normalType", normalType, "vertexColorType", vertexColorType, object, geometryGroup, material );
+			material = getBufferMaterial( object, geometryGroup );
 
 		geometryGroup.__vertexArray = new Float32Array( nvertices * 3 );
+		geometryGroup.__normalArray = new Float32Array( nvertices * 3 );
+		geometryGroup.__colorArray = new Float32Array( nvertices * 3 );
+		geometryGroup.__uvArray = new Float32Array( nvertices * 2 );
 
-		if ( normalType ) {
+		if ( geometry.faceVertexUvs.length > 1 ) {
 
-			geometryGroup.__normalArray = new Float32Array( nvertices * 3 );
+			geometryGroup.__uv2Array = new Float32Array( nvertices * 2 );
 
 		}
 
 		if ( geometry.hasTangents ) {
 
 			geometryGroup.__tangentArray = new Float32Array( nvertices * 4 );
-
-		}
-
-		if ( vertexColorType ) {
-
-			geometryGroup.__colorArray = new Float32Array( nvertices * 3 );
-
-		}
-
-		if ( uvType ) {
-
-			if ( geometry.faceVertexUvs.length > 0 ) {
-
-				geometryGroup.__uvArray = new Float32Array( nvertices * 2 );
-
-			}
-
-			if ( geometry.faceVertexUvs.length > 1 ) {
-
-				geometryGroup.__uv2Array = new Float32Array( nvertices * 2 );
-
-			}
 
 		}
 
@@ -19753,60 +19587,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 	function materialNeedsSmoothNormals ( material ) {
 
 		return material && material.shading !== undefined && material.shading === THREE.SmoothShading;
-
-	};
-
-	function bufferGuessNormalType ( material ) {
-
-		// only MeshBasicMaterial and MeshDepthMaterial don't need normals
-
-		if ( ( material instanceof THREE.MeshBasicMaterial && ! material.envMap ) || material instanceof THREE.MeshDepthMaterial ) {
-
-			return false;
-
-		}
-
-		if ( materialNeedsSmoothNormals( material ) ) {
-
-			return THREE.SmoothShading;
-
-		} else {
-
-			return THREE.FlatShading;
-
-		}
-
-	};
-
-	function bufferGuessVertexColorType( material ) {
-
-		if ( material.vertexColors ) {
-
-			return material.vertexColors;
-
-		}
-
-		return false;
-
-	};
-
-	function bufferGuessUVType( material ) {
-
-		// material must use some texture to require uvs
-
-		if ( material.map ||
-				 material.lightMap ||
-				 material.bumpMap ||
-				 material.normalMap ||
-				 material.specularMap ||
-				 material.alphaMap ||
-				 material instanceof THREE.ShaderMaterial ) {
-
-			return true;
-
-		}
-
-		return false;
 
 	};
 
@@ -20331,11 +20111,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		var normalType = bufferGuessNormalType( material ),
-		vertexColorType = bufferGuessVertexColorType( material ),
-		uvType = bufferGuessUVType( material ),
-
-		needsSmoothNormals = ( normalType === THREE.SmoothShading );
+		var needsSmoothNormals = materialNeedsSmoothNormals( material );
 
 		var f, fl, fi, face,
 		vertexNormals, faceNormal, normal,
@@ -20596,7 +20372,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		if ( dirtyColors && vertexColorType ) {
+		if ( dirtyColors ) {
 
 			for ( f = 0, fl = chunk_faces3.length; f < fl; f ++ ) {
 
@@ -20605,7 +20381,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 				vertexColors = face.vertexColors;
 				faceColor = face.color;
 
-				if ( vertexColors.length === 3 && vertexColorType === THREE.VertexColors ) {
+				if ( vertexColors.length === 3 && material.vertexColors === THREE.VertexColors ) {
 
 					c1 = vertexColors[ 0 ];
 					c2 = vertexColors[ 1 ];
@@ -20680,7 +20456,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		if ( dirtyNormals && normalType ) {
+		if ( dirtyNormals ) {
 
 			for ( f = 0, fl = chunk_faces3.length; f < fl; f ++ ) {
 
@@ -20724,7 +20500,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		if ( dirtyUvs && obj_uvs && uvType ) {
+		if ( dirtyUvs && obj_uvs ) {
 
 			for ( f = 0, fl = chunk_faces3.length; f < fl; f ++ ) {
 
@@ -20756,7 +20532,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		if ( dirtyUvs && obj_uvs2 && uvType ) {
+		if ( dirtyUvs && obj_uvs2 ) {
 
 			for ( f = 0, fl = chunk_faces3.length; f < fl; f ++ ) {
 
@@ -21298,8 +21074,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.renderBufferDirect = function ( camera, lights, fog, material, geometry, object ) {
 
-		if ( material.visible === false ) return;
-
 		var linewidth, a, attribute;
 		var attributeItem, attributeName, attributePointer, attributeSize;
 
@@ -21534,8 +21308,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 	};
 
 	this.renderBuffer = function ( camera, lights, fog, material, geometryGroup, object ) {
-
-		if ( material.visible === false ) return;
 
 		var linewidth, a, attribute, i, il;
 
@@ -22002,7 +21774,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 		webglObject, object,
 		renderList,
 
-		lights = scene.__lights,
 		fog = scene.fog;
 
 		// reset caching for this frame
@@ -22020,7 +21791,8 @@ THREE.WebGLRenderer = function ( parameters ) {
 		if ( camera.parent === undefined ) camera.updateMatrixWorld();
 
 		// update Skeleton objects
-		function updateSkeletons( object ) {
+
+		scene.traverse( function ( object ) {
 
 			if ( object instanceof THREE.SkinnedMesh ) {
 
@@ -22028,23 +21800,14 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			}
 
-			for ( var i = 0, l = object.children.length; i < l; i ++ ) {
-
-				updateSkeletons( object.children[ i ] );
-
-			}
-
-		}
-
-		updateSkeletons( scene );
+		} );
 
 		camera.matrixWorldInverse.getInverse( camera.matrixWorld );
 
 		_projScreenMatrix.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse );
 		_frustum.setFromMatrix( _projScreenMatrix );
 
-		initObjects( scene );
-
+		lights.length = 0;
 		opaqueObjects.length = 0;
 		transparentObjects.length = 0;
 		
@@ -22076,18 +21839,11 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
-		// set matrices for regular objects (frustum culled)
-
-		
-
-
 		// set matrices for immediate objects
 
-		renderList = scene.__webglObjectsImmediate;
+		for ( i = 0, il = _webglObjectsImmediate.length; i < il; i ++ ) {
 
-		for ( i = 0, il = renderList.length; i < il; i ++ ) {
-
-			webglObject = renderList[ i ];
+			webglObject = _webglObjectsImmediate[ i ];
 			object = webglObject.object;
 
 			if ( object.visible ) {
@@ -22111,7 +21867,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			renderObjects( opaqueObjects, camera, lights, fog, true, material );
 			renderObjects( transparentObjects, camera, lights, fog, true, material );
-			renderObjectsImmediate( scene.__webglObjectsImmediate, '', camera, lights, fog, false, material );
+			renderObjectsImmediate( _webglObjectsImmediate, '', camera, lights, fog, false, material );
 
 		} else {
 
@@ -22122,12 +21878,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 			this.setBlending( THREE.NoBlending );
 
 			renderObjects( opaqueObjects, camera, lights, fog, false, material );
-			renderObjectsImmediate( scene.__webglObjectsImmediate, 'opaque', camera, lights, fog, false, material );
+			renderObjectsImmediate( _webglObjectsImmediate, 'opaque', camera, lights, fog, false, material );
 
 			// transparent pass (back-to-front order)
 
 			renderObjects( transparentObjects, camera, lights, fog, true, material );
-			renderObjectsImmediate( scene.__webglObjectsImmediate, 'transparent', camera, lights, fog, true, material );
+			renderObjectsImmediate( _webglObjectsImmediate, 'transparent', camera, lights, fog, true, material );
 
 		}
 
@@ -22156,33 +21912,49 @@ THREE.WebGLRenderer = function ( parameters ) {
 	function projectObject(scene, object,camera){
 		
 		if ( object.visible === false ) return;
-			
-		var webglObjects = scene.__webglObjects[ object.id ];
 		
-		if ( webglObjects && ( object.frustumCulled === false || _frustum.intersectsObject( object ) === true ) ) {
+		if ( object instanceof THREE.Light ) {
+
+			lights.push( object );
+
+		}
+		
+		if ( object instanceof THREE.Scene ) {
+		
+			//
+		
+		} else {
+		
+			initObject( object, scene );
+		
+			var webglObjects = _webglObjects[ object.id ];
+		
+			if ( webglObjects && ( object.frustumCulled === false || _frustum.intersectsObject( object ) === true ) ) {
 			
-			updateObject( scene, object );
+				updateObject( object, scene );
 			
-			for ( var i = 0, l = webglObjects.length; i < l; i ++ ) {
+				for ( var i = 0, l = webglObjects.length; i < l; i ++ ) {
 				
-				var webglObject = webglObjects[i];
+					var webglObject = webglObjects[i];
 				
-				unrollBufferMaterial( webglObject );
+					unrollBufferMaterial( webglObject );
 
-				webglObject.render = true;
+					webglObject.render = true;
 
-				if ( _this.sortObjects === true ) {
+					if ( _this.sortObjects === true ) {
 
-					if ( object.renderDepth !== null ) {
+						if ( object.renderDepth !== null ) {
 
-						webglObject.z = object.renderDepth;
+							webglObject.z = object.renderDepth;
 
-					} else {
+						} else {
 
-						_vector3.setFromMatrixPosition( object.matrixWorld );
-						_vector3.applyProjection( _projScreenMatrix );
+							_vector3.setFromMatrixPosition( object.matrixWorld );
+							_vector3.applyProjection( _projScreenMatrix );
 
-						webglObject.z = _vector3.z;
+							webglObject.z = _vector3.z;
+
+						}
 
 					}
 
@@ -22197,7 +21969,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 			projectObject( scene, object.children[ i ], camera );
 
 		}
-				
+
 	}
 
 	function renderPlugins( plugins, scene, camera ) {
@@ -22409,49 +22181,19 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	};
 
-	// Objects refresh
-
-	var initObjects = function ( scene ) {
-
-		if ( ! scene.__webglObjects ) {
-
-			scene.__webglObjects = {};
-			scene.__webglObjectsImmediate = [];
-
-		}
-
-		while ( scene.__objectsAdded.length ) {
-
-			addObject( scene.__objectsAdded[ 0 ], scene );
-			scene.__objectsAdded.splice( 0, 1 );
-
-		}
-
-		while ( scene.__objectsRemoved.length ) {
-
-			removeObject( scene.__objectsRemoved[ 0 ], scene );
-			scene.__objectsRemoved.splice( 0, 1 );
-
-		}
-
-	};
-
-	// Objects adding
-
-	function addObject( object, scene ) {
-
-		var g, geometry, geometryGroup;
+	function initObject( object, scene ) {
 
 		if ( object.__webglInit === undefined ) {
 
 			object.__webglInit = true;
+			object.addEventListener( 'dispose', onObjectDispose );
 
 			object._modelViewMatrix = new THREE.Matrix4();
 			object._normalMatrix = new THREE.Matrix3();
 
 		}
 		
-		geometry = object.geometry;
+		var geometry = object.geometry;
 		
 		if ( geometry === undefined ) {
 
@@ -22509,18 +22251,16 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			if ( object instanceof THREE.Mesh ) {
 
-				geometry = object.geometry;
-
 				if ( geometry instanceof THREE.BufferGeometry ) {
 
-					addBuffer( scene.__webglObjects, geometry, object );
+					addBuffer( _webglObjects, geometry, object );
 
 				} else if ( geometry instanceof THREE.Geometry ) {
 
 					for ( var i = 0,l = geometry.geometryGroupsList.length; i<l;i++ ) {
 	
-						geometryGroup = geometry.geometryGroupsList[ i ];
-						addBuffer( scene.__webglObjects, geometryGroup, object );
+						var geometryGroup = geometry.geometryGroupsList[ i ];
+						addBuffer( _webglObjects, geometryGroup, object );
 						
 					}
 				}
@@ -22528,12 +22268,11 @@ THREE.WebGLRenderer = function ( parameters ) {
 			} else if ( object instanceof THREE.Line ||
 						object instanceof THREE.PointCloud ) {
 
-				geometry = object.geometry;
-				addBuffer( scene.__webglObjects, geometry, object );
+				addBuffer( _webglObjects, geometry, object );
 
 			} else if ( object instanceof THREE.ImmediateRenderObject || object.immediateRenderCallback ) {
 
-				addBufferImmediate( scene.__webglObjectsImmediate, object );
+				addBufferImmediate( _webglObjectsImmediate, object );
 
 			}
 
@@ -22550,7 +22289,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		if ( geometry.geometryGroups === undefined || geometry.groupsNeedUpdate ) {
 			
-			delete scene.__webglObjects[object.id];
+			delete _webglObjects[object.id];
 			geometry.makeGroups( material instanceof THREE.MeshFaceMaterial, _glExtensionElementIndexUint ? 4294967296 : 65535  );
 			geometry.groupsNeedUpdate = false;
 
@@ -22586,7 +22325,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 			}
 			
 			if ( addBuffers || object.__webglActive === undefined ) {
-				addBuffer( scene.__webglObjects, geometryGroup, object );
+				addBuffer( _webglObjects, geometryGroup, object );
 			}
 
 		}
@@ -22627,7 +22366,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	// Objects updates
 
-	function updateObject(scene, object ) {
+	function updateObject( object, scene ) {
 
 		var geometry = object.geometry,
 			geometryGroup, customAttributesDirty, material;
@@ -22755,29 +22494,21 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	// Objects removal
 
-	function removeObject( object, scene ) {
+	function removeObject( object ) {
 
 		if ( object instanceof THREE.Mesh  ||
 			 object instanceof THREE.PointCloud ||
 			 object instanceof THREE.Line ) {
 
-			removeInstancesWebglObjects( scene.__webglObjects, object );
+			delete _webglObjects[ object.id ];
 
 		} else if ( object instanceof THREE.ImmediateRenderObject || object.immediateRenderCallback ) {
 
-			removeInstances( scene.__webglObjectsImmediate, object );
+			removeInstances( _webglObjectsImmediate, object );
 
 		}
 
 		delete object.__webglActive;
-
-	};
-	
-	
-
-	function removeInstancesWebglObjects( objlist, object ) {
-
-		delete objlist[ object.id ]; 
 
 	};
 
@@ -22797,7 +22528,13 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	// Materials
 
-	this.initMaterial = function ( material, lights, fog, object ) {
+	this.initMaterial = function () {
+	
+		console.warn( 'THREE.WebGLRenderer: .initMaterial() has been removed.' );
+	
+	};
+
+	function initMaterial( material, lights, fog, object ) {
 
 		material.addEventListener( 'dispose', onMaterialDispose );
 
@@ -22894,8 +22631,8 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			morphTargets: material.morphTargets,
 			morphNormals: material.morphNormals,
-			maxMorphTargets: this.maxMorphTargets,
-			maxMorphNormals: this.maxMorphNormals,
+			maxMorphTargets: _this.maxMorphTargets,
+			maxMorphNormals: _this.maxMorphNormals,
 
 			maxDirLights: maxLightCount.directional,
 			maxPointLights: maxLightCount.point,
@@ -22903,10 +22640,10 @@ THREE.WebGLRenderer = function ( parameters ) {
 			maxHemiLights: maxLightCount.hemi,
 
 			maxShadows: maxShadows,
-			shadowMapEnabled: this.shadowMapEnabled && object.receiveShadow && maxShadows > 0,
-			shadowMapType: this.shadowMapType,
-			shadowMapDebug: this.shadowMapDebug,
-			shadowMapCascade: this.shadowMapCascade,
+			shadowMapEnabled: _this.shadowMapEnabled && object.receiveShadow && maxShadows > 0,
+			shadowMapType: _this.shadowMapType,
+			shadowMapDebug: _this.shadowMapDebug,
+			shadowMapCascade: _this.shadowMapCascade,
 
 			alphaTest: material.alphaTest,
 			metal: material.metal,
@@ -22968,7 +22705,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		if ( program === undefined ) {
 
-			program = new THREE.WebGLProgram( this, code, material, parameters );
+			program = new THREE.WebGLProgram( _this, code, material, parameters );
 			_programs.push( program );
 
 			_this.info.memory.programs = _programs.length;
@@ -22985,7 +22722,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			var id, base = 'morphTarget';
 
-			for ( i = 0; i < this.maxMorphTargets; i ++ ) {
+			for ( i = 0; i < _this.maxMorphTargets; i ++ ) {
 
 				id = base + i;
 
@@ -23005,7 +22742,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			var id, base = 'morphNormal';
 
-			for ( i = 0; i < this.maxMorphNormals; i ++ ) {
+			for ( i = 0; i < _this.maxMorphNormals; i ++ ) {
 
 				id = base + i;
 
@@ -23041,7 +22778,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			if ( material.program ) deallocateMaterial( material );
 
-			_this.initMaterial( material, lights, fog, object );
+			initMaterial( material, lights, fog, object );
 			material.needsUpdate = false;
 
 		}
@@ -28673,6 +28410,12 @@ THREE.AnimationHandler = {
 
 		for ( var i = 0; i < this.animations.length; i ++ ) {
 
+			this.animations[ i ].resetBlendWeights( );
+
+		}
+
+		for ( var i = 0; i < this.animations.length; i ++ ) {
+
 			this.animations[ i ].update( deltaTimeMS );
 
 		}
@@ -28742,20 +28485,26 @@ THREE.Animation.prototype.reset = function () {
 
 		if ( object.animationCache === undefined ) {
 
-			object.animationCache = {};
+			object.animationCache = {
+				animations: {},
+				blending: {
+					positionWeight: 0.0,
+					quaternionWeight: 0.0,
+					scaleWeight: 0.0
+				}
+			};
+		}
+
+		if ( object.animationCache.animations[this.data.name] === undefined ) {
+
+			object.animationCache.animations[this.data.name] = {};
+			object.animationCache.animations[this.data.name].prevKey = { pos: 0, rot: 0, scl: 0 };
+			object.animationCache.animations[this.data.name].nextKey = { pos: 0, rot: 0, scl: 0 };
+			object.animationCache.animations[this.data.name].originalMatrix = object.matrix;
 
 		}
 
-		if ( object.animationCache[this.data.name] === undefined ) {
-
-			object.animationCache[this.data.name] = {};
-			object.animationCache[this.data.name].prevKey = { pos: 0, rot: 0, scl: 0 };
-			object.animationCache[this.data.name].nextKey = { pos: 0, rot: 0, scl: 0 };
-			object.animationCache[this.data.name].originalMatrix = object.matrix;
-
-		}
-
-		var animationCache = object.animationCache[this.data.name];
+		var animationCache = object.animationCache.animations[this.data.name];
 
 		// Get keys to match our current time
 
@@ -28782,6 +28531,23 @@ THREE.Animation.prototype.reset = function () {
 
 };
 
+THREE.Animation.prototype.resetBlendWeights = function () {
+
+	for ( var h = 0, hl = this.hierarchy.length; h < hl; h ++ ) {
+
+		var object = this.hierarchy[ h ];
+
+		if ( object.animationCache !== undefined ) {
+
+			object.animationCache.blending.positionWeight = 0.0;
+			object.animationCache.blending.quaternionWeight = 0.0;
+			object.animationCache.blending.scaleWeight = 0.0;
+
+		}
+
+	}
+
+};
 
 THREE.Animation.prototype.update = (function(){
 
@@ -28860,7 +28626,8 @@ THREE.Animation.prototype.update = (function(){
 		for ( var h = 0, hl = this.hierarchy.length; h < hl; h ++ ) {
 
 			var object = this.hierarchy[ h ];
-			var animationCache = object.animationCache[this.data.name];
+			var animationCache = object.animationCache.animations[this.data.name];
+			var blending = object.animationCache.blending;
 
 			// loop through pos/rot/scl
 
@@ -28911,17 +28678,9 @@ THREE.Animation.prototype.update = (function(){
 						newVector.z = prevXYZ[ 2 ] + ( nextXYZ[ 2 ] - prevXYZ[ 2 ] ) * scale;
 
 						// blend
-						if ( object instanceof THREE.Bone ) {
-
-							var proportionalWeight = this.weight / ( this.weight + object.accumulatedPosWeight );
-							object.position.lerp( newVector, proportionalWeight );
-							object.accumulatedPosWeight += this.weight;
-
-						} else {
-
-							object.position.copy( newVector );
-
-						}
+						var proportionalWeight = this.weight / ( this.weight + blending.positionWeight );
+						object.position.lerp( newVector, proportionalWeight );
+						blending.positionWeight += this.weight;
 
 					} else if ( this.interpolationType === THREE.AnimationHandler.CATMULLROM ||
 								this.interpolationType === THREE.AnimationHandler.CATMULLROM_FORWARD ) {
@@ -28934,14 +28693,8 @@ THREE.Animation.prototype.update = (function(){
 						scale = scale * 0.33 + 0.33;
 
 						var currentPoint = interpolateCatmullRom( points, scale );
-						var proportionalWeight = 1;
-						
-						if ( object instanceof THREE.Bone ) {
-
-							proportionalWeight = this.weight / ( this.weight + object.accumulatedPosWeight );
-							object.accumulatedPosWeight += this.weight;
-
-						}
+						var proportionalWeight = this.weight / ( this.weight + blending.positionWeight );
+						blending.positionWeight += this.weight;
 
 						// blend
 
@@ -28972,20 +28725,16 @@ THREE.Animation.prototype.update = (function(){
 					THREE.Quaternion.slerp( prevXYZ, nextXYZ, newQuat, scale );
 
 					// Avoid paying the cost of an additional slerp if we don't have to
-					if ( ! ( object instanceof THREE.Bone ) ) {
+					if ( blending.quaternionWeight === 0 ) {
 
 						object.quaternion.copy(newQuat);
-
-					} else if ( object.accumulatedRotWeight === 0 ) {
-
-						object.quaternion.copy(newQuat);
-						object.accumulatedRotWeight = this.weight;
+						blending.quaternionWeight = this.weight;
 
 					} else {
 
-						var proportionalWeight = this.weight / ( this.weight + object.accumulatedRotWeight );
+						var proportionalWeight = this.weight / ( this.weight + blending.quaternionWeight );
 						THREE.Quaternion.slerp( object.quaternion, newQuat, object.quaternion, proportionalWeight );
-						object.accumulatedRotWeight += this.weight;
+						blending.quaternionWeight += this.weight;
 
 					}
 
@@ -28995,17 +28744,9 @@ THREE.Animation.prototype.update = (function(){
 					newVector.y = prevXYZ[ 1 ] + ( nextXYZ[ 1 ] - prevXYZ[ 1 ] ) * scale;
 					newVector.z = prevXYZ[ 2 ] + ( nextXYZ[ 2 ] - prevXYZ[ 2 ] ) * scale;
 
-					if ( object instanceof THREE.Bone ) {
-
-						var proportionalWeight = this.weight / ( this.weight + object.accumulatedSclWeight);
-						object.scale.lerp( newVector, proportionalWeight );
-						object.accumulatedSclWeight += this.weight;
-
-					} else {
-
-						object.scale.copy( newVector );
-
-					}
+					var proportionalWeight = this.weight / ( this.weight + blending.scaleWeight );
+					object.scale.lerp( newVector, proportionalWeight );
+					blending.scaleWeight += this.weight;
 
 				}
 
@@ -29602,7 +29343,7 @@ THREE.CircleGeometry.prototype = Object.create( THREE.Geometry.prototype );
 
 THREE.CubeGeometry = function ( width, height, depth, widthSegments, heightSegments, depthSegments ) {
 
-	console.warn( 'THEE.CubeGeometry has been renamed to THREE.BoxGeometry.' );
+	console.warn( 'THREE.CubeGeometry has been renamed to THREE.BoxGeometry.' );
 	return new THREE.BoxGeometry( width, height, depth, widthSegments, heightSegments, depthSegments );
 
  };
@@ -32469,7 +32210,7 @@ THREE.EdgesHelper = function ( object, hex ) {
 
 	}
 
-	geometry.addAttribute( 'position', new THREE.Float32Attribute( numEdges * 2 * 3, 3 ) );
+	geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( numEdges * 2 * 3 ), 3 ) );
 
 	var coords = geometry.attributes.position.array;
 
@@ -34038,6 +33779,7 @@ THREE.ShadowMapPlugin = function () {
 
 	var _gl,
 	_renderer,
+	_lights, _webglObjects, _webglObjectsImmediate,
 	_depthMaterial, _depthMaterialMorph, _depthMaterialSkin, _depthMaterialMorphSkin,
 
 	_frustum = new THREE.Frustum(),
@@ -34050,10 +33792,14 @@ THREE.ShadowMapPlugin = function () {
 	
 	_renderList = [];
 
-	this.init = function ( renderer ) {
+	this.init = function ( renderer, lights, webglObjects, webglObjectsImmediate ) {
 
 		_gl = renderer.context;
 		_renderer = renderer;
+		_lights = lights;
+
+		_webglObjects = webglObjects;
+		_webglObjectsImmediate = webglObjectsImmediate;
 
 		var depthShader = THREE.ShaderLib[ "depthRGBA" ];
 		var depthUniforms = THREE.UniformsUtils.clone( depthShader.uniforms );
@@ -34115,9 +33861,9 @@ THREE.ShadowMapPlugin = function () {
 		// 	- skip lights that are not casting shadows
 		//	- create virtual lights for cascaded shadow maps
 
-		for ( i = 0, il = scene.__lights.length; i < il; i ++ ) {
+		for ( i = 0, il = _lights.length; i < il; i ++ ) {
 
-			light = scene.__lights[ i ];
+			light = _lights[ i ];
 
 			if ( ! light.castShadow ) continue;
 
@@ -34314,11 +34060,11 @@ THREE.ShadowMapPlugin = function () {
 
 				if ( buffer instanceof THREE.BufferGeometry ) {
 
-					_renderer.renderBufferDirect( shadowCamera, scene.__lights, fog, material, buffer, object );
+					_renderer.renderBufferDirect( shadowCamera, _lights, fog, material, buffer, object );
 
 				} else {
 
-					_renderer.renderBuffer( shadowCamera, scene.__lights, fog, material, buffer, object );
+					_renderer.renderBuffer( shadowCamera, _lights, fog, material, buffer, object );
 
 				}
 
@@ -34326,18 +34072,16 @@ THREE.ShadowMapPlugin = function () {
 
 			// set matrices and render immediate objects
 
-			var renderList = scene.__webglObjectsImmediate;
+			for ( j = 0, jl = _webglObjectsImmediate.length; j < jl; j ++ ) {
 
-			for ( j = 0, jl = renderList.length; j < jl; j ++ ) {
-
-				webglObject = renderList[ j ];
+				webglObject = _webglObjectsImmediate[ j ];
 				object = webglObject.object;
 
 				if ( object.visible && object.castShadow ) {
 
 					object._modelViewMatrix.multiplyMatrices( shadowCamera.matrixWorldInverse, object.matrixWorld );
 
-					_renderer.renderImmediateObject( shadowCamera, scene.__lights, fog, _depthMaterial, object );
+					_renderer.renderImmediateObject( shadowCamera, _lights, fog, _depthMaterial, object );
 
 				}
 
@@ -34365,7 +34109,7 @@ THREE.ShadowMapPlugin = function () {
 		
 		if ( object.visible ) {
 	
-			var webglObjects = scene.__webglObjects[object.id];
+			var webglObjects = _webglObjects[object.id];
 	
 			if (webglObjects && object.castShadow && (object.frustumCulled === false || _frustum.intersectsObject( object ) === true) ) {
 		
@@ -34914,16 +34658,21 @@ THREE.DepthPassPlugin = function () {
 
 	var _gl,
 	_renderer,
+	_lights, _webglObjects, _webglObjectsImmediate,
 	_depthMaterial, _depthMaterialMorph, _depthMaterialSkin, _depthMaterialMorphSkin,
 
 	_frustum = new THREE.Frustum(),
 	_projScreenMatrix = new THREE.Matrix4(),
 	_renderList = [];
 
-	this.init = function ( renderer ) {
+	this.init = function ( renderer, lights, webglObjects, webglObjectsImmediate ) {
 
 		_gl = renderer.context;
 		_renderer = renderer;
+		_lights = lights;
+
+		_webglObjects = webglObjects;
+		_webglObjectsImmediate = webglObjectsImmediate;
 
 		var depthShader = THREE.ShaderLib[ "depthRGBA" ];
 		var depthUniforms = THREE.UniformsUtils.clone( depthShader.uniforms );
@@ -35028,11 +34777,11 @@ THREE.DepthPassPlugin = function () {
 
 			if ( buffer instanceof THREE.BufferGeometry ) {
 
-				_renderer.renderBufferDirect( camera, scene.__lights, fog, material, buffer, object );
+				_renderer.renderBufferDirect( camera, _lights, fog, material, buffer, object );
 
 			} else {
 
-				_renderer.renderBuffer( camera, scene.__lights, fog, material, buffer, object );
+				_renderer.renderBuffer( camera, _lights, fog, material, buffer, object );
 
 			}
 
@@ -35041,18 +34790,16 @@ THREE.DepthPassPlugin = function () {
 
 		// set matrices and render immediate objects
 
-		renderList = scene.__webglObjectsImmediate;
+		for ( j = 0, jl = _webglObjectsImmediate.length; j < jl; j ++ ) {
 
-		for ( j = 0, jl = renderList.length; j < jl; j ++ ) {
-
-			webglObject = renderList[ j ];
+			webglObject = _webglObjectsImmediate[ j ];
 			object = webglObject.object;
 
 			if ( object.visible ) {
 
 				object._modelViewMatrix.multiplyMatrices( camera.matrixWorldInverse, object.matrixWorld );
 
-				_renderer.renderImmediateObject( camera, scene.__lights, fog, _depthMaterial, object );
+				_renderer.renderImmediateObject( camera, _lights, fog, _depthMaterial, object );
 
 			}
 
@@ -35072,7 +34819,7 @@ THREE.DepthPassPlugin = function () {
 		
 		if ( object.visible ) {
 	
-			var webglObjects = scene.__webglObjects[object.id];
+			var webglObjects = _webglObjects[object.id];
 	
 			if (webglObjects && (object.frustumCulled === false || _frustum.intersectsObject( object ) === true) ) {
 		
@@ -35297,25 +35044,2124 @@ THREE.ShaderFlares = {
 
 };
 
-// File:src/math/pnltri.min.js
+// File:src/math/pnltri/Pnltri.js
 
-// pnltri.js / raw.github.com/jahting/pnltri.js/master/LICENSE
-'use strict';var r={ea:"1.4"};r.f={random:Math.random,fa:function(a){for(var b=a.length-1;0<b;b--){var c=Math.floor(r.f.random()*(b+1)),e=a[b];a[b]=a[c];a[c]=e}return a},V:function(a,b,c){return(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)},ca:function(a){return Math.sqrt(a.x*a.x+a.y*a.y)},ha:function(a,b){return a.x*b.x+a.y*b.y},ga:function(a,b){return a.x*b.y-b.x*a.y},ia:function(a,b,c){b={x:b.x-a.x,y:b.y-a.y};a={x:c.x-a.x,y:c.y-a.y};c=r.f.ha(b,a)/r.f.ca(b)/r.f.ca(a);return 0<=r.f.ga(b,a)?1-c:3+c},R:function(a,b){var c=a.y-b.y;if(c<
-r.f.D)return-1;if(c>r.f.m)return 1;c=a.x-b.x;return c<r.f.D?-1:c>r.f.m?1:0}};r.f.m=Math.pow(2,-43);r.f.D=-r.f.m;function v(a){this.da=[];this.p=[];this.M=0;this.F=[];this.n=[];this.W=[];if(a)for(var b=0,c=a.length;b<c;b++){var e=w(this,a[b]);if(3>e.length)console.log("Polygon has < 3 vertices!",e);else{for(var d=void 0,h=void 0,g=void 0,f=0;f<e.length-1;f++)d=A(this,e[f],e[f+1]),g?(d.q=g,g.l=d):h=d,g=d,this.p.push(d);d=A(this,e[e.length-1],e[0]);d.q=g;g.l=d;this.p.push(d);h.q=d;d.l=h;this.F[this.M++]=!0}}}v.prototype={S:function(){return this.F.concat()}};function C(a,b,c,e){a.W.push([b.id,c.id,e.id])}
-function D(a,b,c,e,d){var h=E(c,e).O,g=E(e,c).O,f=F(a,{b:c,k:e,K:!0,h:h.h,g:g});c=F(a,{b:e,k:c,K:!1,h:g.h,g:h});h.h.g=f;g.h.g=c;h.h=c;g.h=f;h=a.n.length;d?(a.n[b]=f,a.n[h]=c):(a.n[b]=c,a.n[h]=f);return h}function E(a,b){for(var c,e,d=null,h=4,g=0;g<a.u.length;g++)c=a.u[g],(e=r.f.ia(a,c.X,b))<h&&(h=e,d=c);return d}function F(a,b){a.p.push(b);b.b.u.push({O:b,X:b.k});return b}
-function w(a,b){function c(a,b){return Math.abs(a.x-b.x)<r.f.m&&Math.abs(a.y-b.y)<r.f.m}for(var e=[],d,h,g,f=0;f<b.length;f++)d=G(a,b[f].x,b[f].y),h=!0,g=e.length-1,0<=g&&c(d,e[g])&&(h=!1),h&&e.push(d);1<e.length&&c(e[e.length-1],e[0])&&e.pop();return e}function A(a,b,c){return{Q:a.M,b:b,k:c,K:1==r.f.R(c,b),q:null,l:null,G:null,H:null,t:!1,I:null,J:null,h:null,g:null,T:!1}}function G(a,b,c){b={id:a.da.length,x:b,y:c,u:[]};a.da.push(b);return b};function H(a){this.i=a}H.prototype={};function I(a,b,c,e){this.C=a?a:{x:Number.POSITIVE_INFINITY,y:Number.POSITIVE_INFINITY};this.j=b?b:{x:Number.NEGATIVE_INFINITY,y:Number.NEGATIVE_INFINITY};this.o=c;this.r=e;this.depth=-1;this.U=!1}I.prototype={};function J(a){var b=new I(a.C,a.j,a.o,a.r);b.d=a.d;b.e=a.e;b.a=a.a;b.c=a.c;b.s=a.s;return b}function K(a){this.w=a;a.s=this}K.prototype={};
-function L(a){var b=new I(null,null,null,null);this.A=[];M(this,b);this.root=new K(b);if(a)for(a=a.p,b=0;b<a.length;b++)a[b].G=a[b].H=this.root,a[b].t=!1}L.prototype={L:function(){for(var a,b=0,c=this.A.length;b<c;b++)if(a=this.A[b],1==a.depth%2&&!a.U&&(!a.d&&!a.e||!a.a&&!a.c)&&a.o)return a;return null}};
-function O(a,b){function c(){var a=m.d||m.e;a.a&&a.c?m==a.a?(n.d=null,a.a=q):(q.e=null,a.c=n):(n.d=null,n.e=a,a.c=n)}function e(a){m.j==t.j?(p?m.a?(a.d=q,q.a=a,n.c=null):(a.e=n,q.a=null,n.c=a):(a.d=q,a.e=n,q.a=n.c=a),q.c=n.a=null):(a.d&&a.e&&(a.d==m?(a.B=a.e,a.ba=!0):(a.B=a.d,a.ba=!1)),a.d=q,a.e=n,q.c=n.a=a,q.a=n.c=null)}function d(){var a;m.j==t.j&&p?(m.a.d=q,m.c.e=n,q.a=m.a,n.c=m.c,a=q.c=n.a=null):(m.a.d=q,m.c.e=n,0<P(b,m.j)?(a=m.c,m.c.d=q,q.a=m.a,n.c=null):(a=m.a,m.a.e=n,n.c=m.c,q.a=null),q.c=
-n.a=a);return a}var h,g,f,k,l,p;b.K?(k=b.b,h=b.k,l=b.G,g=b.H,p=b.q.t,f=b.l.t):(k=b.k,h=b.b,l=b.H,g=b.G,p=b.l.t,f=b.q.t);g=Q(h,k,g);f||(g=R(a,g,h,!1));f=g.w;if(f.d||f.e){g=Q(k,h,l);p||(g=R(a,g,k,!0));var t=g.w,m=f,q,n,x,u;for(h=a.A.length+2;m;){if(0>--h){console.log("ERR add_segment: infinite loop",m,b,a);return}if(!m.a&&!m.c){console.log("ERR add_segment: missing successors",m,b,a);return}k=m.s;k.v=b;k.w=null;u&&u.r==m.r?(q=m,n=u,n.j=m.j,k.left=new K(q),k.right=u.s):(x&&x.o==m.o?(n=m,q=x,q.j=m.j,
-k.left=x.s):(q=m,n=W(a,m),k.left=new K(q)),k.right=new K(n));m.d&&m.e?m.B?(m.ba?(n.d=m.e,n.e=m.B,n.d.a=n,n.e.c=n):(q.e=m.d,q.d=m.B,q.d.a=q,q.e.c=q),q.B=n.B=null):m.C==f.C?(n.e.c=n,q.e=n.d=null):n==m?(n.d=n.e,n.e=null,n.d.a=n):(q.e=q.d,q.d=null):c();m.a&&m.c?k=d():(k=m.a?m.a:m.c,e(k));q.r&&(q.r.I=n);n.o&&(n.o.J=q);q.r=n.o=b;b.I=q;b.J=n;m.j!=t.j?(x=q,u=n,m=k):m=null}b.t=!0}else console.log("ERR add_segment: missing trFirst.uX: ",f)}
-function Q(a,b,c){for(var e;c;)if(c.Y)e=a==c.Y?b:a,e=r.f.R(e,c.Y),c=-1==e?c.left:c.right;else if(c.v)a==c.v.b||a==c.v.k?Math.abs(a.y-b.y)<r.f.m?c=b.x<a.x?c.left:c.right:(e=P(c.v,b),c=0<e?c.left:0>e?c.right:a==c.v.b?c.right:c.left):(e=a,e=P(c.v,e),c=0<e?c.left:c.right);else return c.w||console.log("ptNode: unknown type",c),c}
-function P(a,b){var c,e;e=a.b.x-b.x;var d=a.k.x-b.x;if(Math.abs(a.k.y-b.y)<r.f.m)c=d;else if(Math.abs(a.b.y-b.y)<r.f.m)c=e,e=d;else return a.K?r.f.V(a.b,a.k,b):r.f.V(a.k,a.b,b);return Math.abs(c)<r.f.m?Math.abs(e)<r.f.m?0:e:c}function R(a,b,c,e){var d=b.w;if(d.C==c||d.j==c)return b;var h=J(d);d.j=h.C=c;d.a=h;h.d=d;d.c=h.e=null;h.a&&(h.a.d=h);h.c&&(h.c.e=h);M(a,h);b.Y=c;b.w=null;b.right=new K(d);b.left=new K(h);return e?d.s:h.s}function W(a,b){var c=J(b);M(a,c);return c}
-function M(a,b){b.ka=a.A.length;a.A.push(b)}function X(a){this.i=a;this.$=new L(this.i)}X.prototype={L:function(){return this.$.L()}};function Y(a){this.i=a;this.aa=this.P=null}Y.prototype={};
-function aa(a,b,c){var e=null,d=null;function h(){var a;return(a=g.pop())?(f=a[0],k=a[1],l=a[2],p=a[3],!0):!1}var g=[],f,k,l,p,t;null==e&&(d=!0,c.d?e=!0:c.a?e=!1:(d=!1,e=c.e?!0:!1));for(c&&g.push([c,e,d,b]);h();)if(!f.U){f.U=!0;if(!f.o||!f.r){console.log("ERR alyTrap: lseg/rseg missing",f);break}k?l?(b=f.d,c=f.e,e=f.a,d=f.c):(b=f.e,c=f.d,e=f.c,d=f.a):l?(b=f.a,c=f.c,e=f.d,d=f.e):(b=f.c,c=f.a,e=f.e,d=f.d);if(c||d)t=D(a.i,p,f.j,f.C,l);d&&g.push([d,k,!l,t]);c&&g.push([c,!k,!l,t]);e&&g.push([e,k,l,p]);
-e||d||b&&g.push([b,!k,l,p])}};function Z(a){this.i=a}Z.prototype={};function $(){this.N=null}
-$.prototype={Z:function(){this.N=null},S:function(){return this.N?this.N.S():null},ja:function(a,b){this.Z();if(!a||0==a.length)return[];var c=new v(a),e=b?!1:1==c.M;if(e){e=new H(c);a:{var d=e.i,h=d.p[0],g=h,f=h,k=0;do k+=(f.b.x-f.k.x)*(f.b.y+f.k.y),f=f.l;while(f!=h);if(0>k){do g.h=g.l,g=g.g=g.q;while(g!=h);d.F[0]=!1}else{do g.h=g.q,g=g.g=g.l;while(g!=h)}for(h=d=h;d.g!=d.h;){b:{var g=d.h.b.x,f=d.h.b.y,k=d.b.x,l=d.b.y,p=d.g.b.x,t=d.g.b.y,m=p-k,q=t-l,n=g-p,x=f-t,u=k-g,N=l-f;if(r.f.m>u*q-m*N)g=!1;else{for(var ba=
-d.h.h,B=d.g;B!=ba;){var B=B.g,y=B.b.x,z=B.b.y,S=y-g,T=z-f;if(0!=S||0!=T){var U=y-k,V=z-l;if(0!=U||0!=V)if(y-=p,z-=t,(0!=y||0!=z)&&m*V-q*U>=r.f.D&&u*T-N*S>=r.f.D&&n*z-x*y>=r.f.D){g=!1;break b}}}g=!0}}if(g)C(e.i,d.h.b,d.b,d.g.b),d.h.g=d.g,d.g.h=d.h,h=d=d.g;else if(d=d.g,d==h){e=!1;break a}}e=!0}}if(!e){e=new Y(c);e.P=new X(e.i);h=e.P;d=h.i.p.concat();r.f.fa(d);g=0;f=h.i.M;if(1!=f)for(k=Array(f),l=d.concat(),p=0;p<l.length;p++)t=l[p].Q,k[t]?d[f++]=l[p]:(d[g++]=l[p],k[t]=!0);g=d.length;f=h.$;k=0;for(l=
-g;k<g;){l=Math.log(l)/Math.LN2;for(p=1<l?Math.floor(g/l):g;k<p;k++)O(f,d[k]);for(p=k;p<g;p++)t=d[p],t.G=Q(t.b,t.k,t.G),t.H=Q(t.k,t.b,t.H)}var h=h.i,f=[f.A[0]],k=[],s,p=0;do{for(t=1==p%2;l=f.pop();)-1==l.depth&&(l.depth=p,l.d&&f.push(l.d),l.e&&f.push(l.e),l.a&&f.push(l.a),l.c&&f.push(l.c),(s=l.o)&&-1==s.I.depth&&k.push(s.I),s=l.r)&&(-1==s.J.depth&&k.push(s.J),s.K!=t&&(h.F[s.Q]=!1));f=k;k=[];p++}while(0<f.length);for(p=0;p<g;p++)d[p].I=d[p].J=null;e.aa=e.P.L();s=e.i;for(h=0;h<s.p.length;h++)d=s.p[h],
-s.F[d.Q]?(d.h=d.q,d.g=d.l,d.b.u.push({O:d,X:d.k})):(d=d.l,d.h=d.l,d.g=d.q,d.b.u.push({O:d,X:s.p[h].b}));for(s=e.aa;s;)d=aa,h=e,g=e.i,f=g.n.length,g.n[f]=s.o,d(h,f,s),s=e.P.L();s=e.i;k=[];for(l=0;l<s.n.length;l++){e=d=s.n[l];g=f=e.b;e.T=!0;e=e.g;for(p=!1;(h=e.b)!=g;){if(e.T){p=!0;break}else e.T=!0;1==r.f.R(h,f)&&(f=h,d=e);e=e.g}p||k.push(d)}s.n=k;s=e=new Z(c);e=s.i.n;s.i.W=[];for(d=0;d<e.length;d++)if(f=e[d],h=f.h,g=f.g,g.g==h)C(s.i,f.b,g.b,h.b);else if(h=s,g=f.g,f=f.b,k=[g.b],l=0,g=g.g,p=g.b,p!=f){for(;p!=
-f||1<l;)if(0<l)if(0<r.f.V(p,k[l-1],k[l]))C(h.i,k[l-1],k[l],p),l--;else if(k[++l]=p,p==f)for(console.log("ERR uni-y-monotone: only concave angles left",k);1<l;)l--,C(h.i,k[l-1],k[l],k[l+1]);else g=g.g,p=g.b;else k[++l]=p,g=g.g,p=g.b;C(h.i,k[l-1],k[l],p)}s=c.p;for(e=0;e<s.length;e++)s[e].b.u=null}this.N=c;return c.W.concat()}};var PNLTRI=r;r.REVISION=r.ea;r.Triangulator=$;$.prototype.clear_lastData=$.prototype.Z;$.prototype.get_PolyLeftArr=$.prototype.S;$.prototype.triangulate_polygon=$.prototype.ja;
+/**
+ * @author jahting / http://www.ameco.tv/
+ *
+ *	(Simple) Polygon Near-Linear Triangulation
+ *	  with fast ear-clipping for polygons without holes
+ *
+ */
+ 
+var PNLTRI = { REVISION: '2.0' };
+
+//	#####  Global Constants  #####
+
+
+//	#####  Global Variables  #####
+
+
+
+// File:src/math/pnltri/PnltriMath.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ */
+
+PNLTRI.Math = {
+
+	random: Math.random,		// function to use for random number generation
+
+	// generate random ordering in place:
+	//	Fisher-Yates shuffle
+	array_shuffle: function( inoutArray ) {
+		for (var i = inoutArray.length - 1; i > 0; i-- ) {
+			var j = Math.floor( PNLTRI.Math.random() * (i+1) );
+			var tmp = inoutArray[i];
+			inoutArray[i] = inoutArray[j];
+			inoutArray[j] = tmp;
+		}
+		return	inoutArray;
+	},
+
+
+	//	like compare (<=>)
+	//		yA > yB resp. xA > xB: 1, equal: 0, otherwise: -1
+	compare_pts_yx: function ( inPtA, inPtB ) {
+		var deltaY = inPtA.y - inPtB.y;
+		if ( deltaY < PNLTRI.Math.EPSILON_N ) {
+			return -1;
+		} else if ( deltaY > PNLTRI.Math.EPSILON_P ) {
+			return 1;
+		} else {
+			var deltaX = inPtA.x - inPtB.x;
+			if ( deltaX < PNLTRI.Math.EPSILON_N ) {
+				return -1;
+			} else if ( deltaX > PNLTRI.Math.EPSILON_P ) {
+				return  1;
+			} else {
+				return  0;
+			}
+		}
+	},
+
+
+	ptsCrossProd: function ( inPtVertex, inPtFrom, inPtTo ) {
+		// two vectors: ( v0: inPtVertex -> inPtFrom ), ( v1: inPtVertex -> inPtTo )
+		// CROSS_SINE: sin(theta) * len(v0) * len(v1)
+		return	( inPtFrom.x - inPtVertex.x ) * ( inPtTo.y - inPtVertex.y ) -
+				( inPtFrom.y - inPtVertex.y ) * ( inPtTo.x - inPtVertex.x );
+		// <=> crossProd( inPtFrom-inPtVertex, inPtTo-inPtVertex )
+		// == 0: colinear (angle == 0 or 180 deg == PI rad)
+		// > 0:  v1 lies left of v0, CCW angle from v0 to v1 is convex ( < 180 deg )
+		// < 0:  v1 lies right of v0, CW angle from v0 to v1 is convex ( < 180 deg )
+	},
+
+}
+
+// precision of floating point arithmetic
+//	PNLTRI.Math.EPSILON_P = Math.pow(2,-32);	// ~ 0.0000000001
+	PNLTRI.Math.EPSILON_P = Math.pow(2,-43);	// ~ 0.0000000000001
+	PNLTRI.Math.EPSILON_N = -PNLTRI.Math.EPSILON_P;
+
+//	Problem with EPSILON-compares:
+//	- especially when there is a x-coordinate ordering on equal y-coordinates
+//		=> either NO EPSILON-compares on y-coordinates, since almost equal y
+//			can have very different x - so they are not nearly close
+//		or EPSILON must be bigger: Solution so far.
+
+// File:src/math/pnltri/PolygonData.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ */
+
+/** @constructor */
+PNLTRI.PolygonData = function ( inPolygonChainList ) {
+
+	// list of polygon vertices
+	//	.x, .y: coordinates
+	this.vertices = [];
+
+	// list of polygon segments, original polygons ane holes
+	//	and additional ones added during the subdivision into
+	//	uni-y-monotone polygons (s. this.monoSubPolyChains)
+	//	doubly linked by: snext, sprev
+	this.segments = [];
+	this.diagonals = [];
+
+	// for the ORIGINAL polygon chains
+	this.idNextPolyChain = 0;
+	//	for each original chain: lies the polygon inside to the left?
+	//	"true": winding order is CCW for a contour or CW for a hole
+	//	"false": winding order is CW for a contour or CCW for a hole
+	this.PolyLeftArr = [];
+
+	// indices into this.segments: at least one for each monoton chain for the polygon
+	//  these subdivide the polygon into uni-y-monotone polygons, that is
+	//  polygons that have only one segment between ymax and ymin on one side
+	//  and the other side has monotone increasing y from ymin to ymax
+	// the monoSubPolyChains are doubly linked by: mnext, mprev
+	this.monoSubPolyChains = [];
+
+	// list of triangles: each 3 indices into this.vertices
+	this.triangles = [];
+
+	// initialize optional polygon chains
+	if ( inPolygonChainList ) {
+		for (var i=0, j=inPolygonChainList.length; i<j; i++) {
+			this.addPolygonChain( inPolygonChainList[i] );
+		}
+	}
+
+};
+
+
+PNLTRI.PolygonData.prototype = {
+
+	constructor: PNLTRI.PolygonData,
+
+
+	/*	Accessors  */
+
+	nbVertices: function () {
+		return	this.vertices.length;
+	},
+	getSegments: function () {
+		return	this.segments;
+	},
+	getFirstSegment: function () {
+		return	this.segments[0];
+	},
+	getMonoSubPolys: function () {
+		return	this.monoSubPolyChains;
+	},
+	getTriangles: function () {
+		return	this.triangles.concat();
+	},
+
+	nbPolyChains: function () {
+		return	this.idNextPolyChain;
+	},
+
+	// for the polygon data AFTER triangulation
+	//	returns an Array of flags, one flag for each polygon chain:
+	//		lies the inside of the polygon to the left?
+	//		"true" implies CCW for contours and CW for holes
+	get_PolyLeftArr: function () {
+		return	this.PolyLeftArr.concat();
+	},
+	set_PolyLeft_wrong: function ( inChainId ) {
+		this.PolyLeftArr[inChainId] = false;
+	},
+
+
+	/*	Helper  */
+
+	// checks winding order by calculating the area of the polygon
+	isClockWise: function ( inStartSeg ) {
+		var cursor = inStartSeg, doubleArea = 0;
+		do {
+			doubleArea += ( cursor.vFrom.x - cursor.vTo.x ) * ( cursor.vFrom.y + cursor.vTo.y );
+			cursor = cursor.snext;
+		} while ( cursor != inStartSeg );
+		return	( doubleArea < 0 );
+	},
+
+
+	/*	Operations  */
+
+	appendVertexEntry: function ( inVertexX, inVertexY ) {			// private
+		var vertex = {
+				id: this.vertices.length,	// vertex id, representing input sequence
+				x: inVertexX,				// coordinates
+				y: inVertexY,
+			};
+		this.vertices.push( vertex );
+		return	vertex;
+	},
+
+
+	createSegmentEntry: function ( inVertexFrom, inVertexTo ) {			// private
+		return	{
+			chainId: this.idNextPolyChain,
+			// end points of segment
+			vFrom: inVertexFrom,	// -> start point entry in vertices
+			vTo: inVertexTo,		// -> end point entry in vertices
+			// upward segment? (i.e. vTo > vFrom) !!! only valid for sprev,snext NOT for mprev,mnext !!!
+			upward: ( PNLTRI.Math.compare_pts_yx(inVertexTo, inVertexFrom) == 1 ),
+			// doubly linked list of original polygon chains (not the monoChains !)
+			sprev: null,			// previous segment
+			snext: null,			// next segment
+			//
+			//	for performance reasons:
+			//	 initialization of all fields added later
+			//
+			// for trapezoids
+			rootFrom: null,			// root of partial tree where vFrom is located
+			rootTo: null,			// root of partial tree where vTo is located
+			is_inserted: false,		// already inserted into QueryStructure ?
+			// for assigning depth: trapezoids
+			trLeft: null,			// one trapezoid bordering on the left of this segment
+			trRight: null,			// one trapezoid bordering on the right of this segment
+			// for monochains
+			mprev: null,			// doubly linked list for monotone chains (sub-polygons)
+			mnext: null,
+			marked: false,			// already visited during unique monoChain identification ?
+		};
+	},
+
+	appendSegmentEntry: function ( inSegment ) {				// private
+		this.segments.push( inSegment );
+		return	inSegment;
+	},
+
+
+	appendDiagonalsEntry: function ( inDiagonal ) {				// <<<<<	public
+		this.diagonals.push( inDiagonal );
+		return	inDiagonal;
+	},
+
+
+	addVertexChain: function ( inRawPointList ) {			// private
+
+		function verts_equal( inVert1, inVert2 ) {
+			return ( ( Math.abs(inVert1.x - inVert2.x) < PNLTRI.Math.EPSILON_P ) &&
+					 ( Math.abs(inVert1.y - inVert2.y) < PNLTRI.Math.EPSILON_P ) );
+		}
+
+		function verts_colinear_chain( inVert1, inVert2, inVert3 ) {
+			if ( Math.abs( PNLTRI.Math.ptsCrossProd( inVert2, inVert1, inVert3 ) ) > PNLTRI.Math.EPSILON_P )	return false;
+			// only real sequences, not direction reversals
+			var low, middle, high;
+			if ( Math.abs( inVert1.y - inVert2.y ) < PNLTRI.Math.EPSILON_P ) {
+				// horizontal line
+				middle = inVert2.x;
+				if ( inVert1.x < inVert3.x ) {
+					low = inVert1.x;
+					high = inVert3.x;
+				} else {
+					low = inVert3.x;
+					high = inVert1.x;
+				}
+			} else {
+				middle = inVert2.y;
+				if ( inVert1.y < inVert3.y ) {
+					low = inVert1.y;
+					high = inVert3.y;
+				} else {
+					low = inVert3.y;
+					high = inVert1.y;
+				}
+			}
+			return	( ( ( low - middle ) < PNLTRI.Math.EPSILON_P ) && ( ( middle - high ) < PNLTRI.Math.EPSILON_P ) );
+		}
+
+		var newVertices = [];
+		var newVertex, acceptVertex, lastIdx;
+		for ( var i=0; i < inRawPointList.length; i++ ) {
+			newVertex = this.appendVertexEntry( inRawPointList[i].x, inRawPointList[i].y );
+			// suppresses zero-length segments
+			acceptVertex = true;
+			lastIdx = newVertices.length-1;
+			if ( lastIdx >= 0 ) {
+				if ( verts_equal( newVertex, newVertices[lastIdx] ) ) {
+					acceptVertex = false;
+				} else if ( lastIdx > 0 ) {
+					if ( verts_colinear_chain( newVertices[lastIdx-1], newVertices[lastIdx], newVertex ) ) {
+						newVertices.pop();
+					}
+				}
+			}
+			if ( acceptVertex )	newVertices.push( newVertex );
+		}
+		// compare last vertices to first: suppresses zero-length and co-linear segments
+		lastIdx = newVertices.length - 1;
+		if ( ( lastIdx > 0 ) &&
+			 verts_equal( newVertices[lastIdx], newVertices[0] ) ) {
+			newVertices.pop();
+			lastIdx--;
+		}
+		if ( lastIdx > 1 ) {
+			if ( verts_colinear_chain( newVertices[lastIdx-1], newVertices[lastIdx], newVertices[0] ) ) {
+				newVertices.pop();
+				lastIdx--;
+			}
+			if ( ( lastIdx > 1 ) &&
+				 verts_colinear_chain( newVertices[lastIdx], newVertices[0], newVertices[1] ) ) {
+				newVertices.shift();
+			}
+		}
+
+		return	newVertices;
+	},
+
+
+	addPolygonChain: function ( inRawPointList ) {			// <<<<<< public
+
+		// vertices
+		var newVertices = this.addVertexChain( inRawPointList );
+		if ( newVertices.length < 3 ) {
+			console.log( "Polygon has < 3 vertices!", newVertices );
+			return	0;
+		}
+
+		// segments
+		var	saveSegListLength = this.segments.length;
+		//
+		var	segment, firstSeg, prevSeg;
+		for ( var i=0; i < newVertices.length-1; i++ ) {
+			segment = this.createSegmentEntry( newVertices[i], newVertices[i+1] );
+			if (prevSeg) {
+				segment.sprev = prevSeg;
+				prevSeg.snext = segment;
+			} else {
+				firstSeg = segment;
+			}
+			prevSeg = segment;
+			this.appendSegmentEntry( segment );
+		}
+		// close polygon
+		segment = this.createSegmentEntry( newVertices[newVertices.length-1], newVertices[0] );
+		segment.sprev = prevSeg;
+		prevSeg.snext = segment;
+		this.appendSegmentEntry( segment );
+		firstSeg.sprev = segment;
+		segment.snext = firstSeg;
+
+		this.PolyLeftArr[this.idNextPolyChain++] = true;
+		return	this.segments.length - saveSegListLength;
+	},
+
+
+	/* Monotone Polygon Chains */
+
+	// Generate the uni-y-monotone sub-polygons from
+	//	the trapezoidation of the polygon.
+
+	create_mono_chains: function () {						// <<<<<< public
+		var newMono, newMonoTo, toFirstOutSeg, fromRevSeg;
+		for ( var i = 0, j = this.segments.length; i < j; i++) {
+			newMono = this.segments[i];
+			if ( this.PolyLeftArr[newMono.chainId] ) {
+				// preserve winding order
+				newMonoTo = newMono.vTo;			// target of segment
+				newMono.mprev = newMono.sprev;		// doubly linked list for monotone chains (sub-polygons)
+				newMono.mnext = newMono.snext;
+			} else {
+				// reverse winding order
+				newMonoTo = newMono.vFrom;
+				newMono = newMono.snext;
+				newMono.mprev = newMono.snext;
+				newMono.mnext = newMono.sprev;
+			}
+			if ( fromRevSeg = newMono.vFrom.lastInDiag ) {
+				fromRevSeg.mnext = newMono;
+				newMono.mprev = fromRevSeg;
+				newMono.vFrom.lastInDiag = null;		// cleanup
+			}
+			if ( toFirstOutSeg = newMonoTo.firstOutDiag ) {
+				toFirstOutSeg.mprev = newMono;
+				newMono.mnext = toFirstOutSeg;
+				newMonoTo.firstOutDiag = null;			// cleanup
+			}
+		}
+	},
+
+	// For each monotone polygon, find the ymax (to determine the two
+	// y-monotone chains) and skip duplicate monotone polygons
+
+	unique_monotone_chains_max: function () {			// <<<<<< public
+
+		function find_monotone_chain_max( frontMono ) {
+			var frontPt, firstPt, ymaxPt;
+
+			var monoPosmax = frontMono;
+			firstPt = ymaxPt = frontMono.vFrom;
+
+			frontMono.marked = true;
+			frontMono = frontMono.mnext;
+			while ( frontPt = frontMono.vFrom ) {
+				if (frontMono.marked) {
+					if ( frontPt == firstPt )	break;	// mono chain completed
+					console.log("ERR unique_monotone: segment in two chains", firstPt, frontMono );
+					return	null;
+				} else {
+/*					if ( frontPt == firstPt ) {			// check for robustness
+						console.log("ERR unique_monotone: point double", firstPt, frontMono );
+					}		*/
+					frontMono.marked = true;
+				}
+				if ( PNLTRI.Math.compare_pts_yx( frontPt, ymaxPt ) == 1 ) {
+					ymaxPt = frontPt;
+					monoPosmax = frontMono;
+				}
+				frontMono = frontMono.mnext;
+			}
+			return	monoPosmax;
+		}
+
+		var frontMono, monoPosmax;
+
+		// assumes attribute "marked" is NOT yet "true" for any mono chain segment
+		this.monoSubPolyChains = [];
+		// loop through all original segments
+		for ( var i = 0, j = this.segments.length; i < j; i++ ) {
+			frontMono = this.segments[i];
+			if ( frontMono.marked )		continue;		// already in a processed mono chain
+			monoPosmax = find_monotone_chain_max( frontMono );
+			if ( monoPosmax )	this.monoSubPolyChains.push( monoPosmax );
+		}
+		// loop through all additional segments (diagonals)			// TODO: Testcase for mono chain without original segments !!!
+/*		for ( var i = 0, j = this.diagonals.length; i < j; i++ ) {
+			frontMono = this.diagonals[i];
+			if ( frontMono.marked )		continue;		// already in a processed mono chain
+			monoPosmax = find_monotone_chain_max( frontMono );
+			if ( monoPosmax )	this.monoSubPolyChains.push( monoPosmax );
+		}	*/
+		return	this.monoSubPolyChains;
+	},
+
+
+	/* Triangles */
+
+	clearTriangles: function () {
+		this.triangles = [];
+	},
+
+	addTriangle: function ( inVert1, inVert2, inVert3 ) {
+		this.triangles.push( [ inVert1.id, inVert2.id, inVert3.id ] );
+	},
+
+};
+
+
+// File:src/math/pnltri/EarClipTriangulator.js
+
+/**
+ * Simple Polygon Triangulation by Ear Clipping
+ *
+ * description of technique employed:
+ *	http://www.siggraph.org/education/materials/HyperGraph/scanline/outprims/polygon1.htm
+ *
+ * This code is a quick port of code written in C++ which was submitted to
+ *	flipcode.com by John W. Ratcliff  // July 22, 2000
+ * See original code and more information here:
+ *	http://www.flipcode.com/archives/Efficient_Polygon_Triangulation.shtml
+ *
+ * ported to actionscript by Zevan Rosser
+ *	http://actionsnippet.com/?p=1462
+ *
+ * ported to javascript by Joshua Koo
+ *	http://www.lab4games.net/zz85/blog
+ *
+ * adapted to doubly linked list by Juergen Ahting
+ *	http://www.ameco.tv
+ *
+ */
+
+/** @constructor */
+PNLTRI.EarClipTriangulator = function ( inPolygonData ) {
+
+	this.polyData	= inPolygonData;
+
+};
+
+
+PNLTRI.EarClipTriangulator.prototype = {
+
+	constructor: PNLTRI.EarClipTriangulator,
+
+
+	// triangulates first doubly linked segment list in this.polyData
+	//	algorithm uses ear-clipping and runs in O(n^2) time
+
+	triangulate_polygon_no_holes: function () {
+
+		function isEarAt( vertex ) {
+
+			var prevX = vertex.mprev.vFrom.x;
+			var prevY = vertex.mprev.vFrom.y;
+
+			var vertX = vertex.vFrom.x;
+			var vertY = vertex.vFrom.y;
+
+			var nextX = vertex.mnext.vFrom.x;
+			var nextY = vertex.mnext.vFrom.y;
+
+			var vnX = nextX - vertX,  vnY = nextY - vertY;
+			var npX = prevX - nextX,  npY = prevY - nextY;
+			var pvX = vertX - prevX,  pvY = vertY - prevY;
+
+			// concave angle at vertex -> not an ear to cut off
+			if ( PNLTRI.Math.EPSILON_P > ( ( pvX * vnY ) - ( vnX * pvY ) ) ) return false;
+
+			// check whether any other point lieas within the triangle abc
+			var vStop	= vertex.mprev.mprev;
+			var vOther	= vertex.mnext;
+			while ( vOther != vStop ) {
+				vOther = vOther.mnext;
+				var otherX = vOther.vFrom.x;
+				var otherY = vOther.vFrom.y;
+
+				var poX = otherX - prevX,  poY = otherY - prevY;
+					// just in case there are several vertices with the same coordinate
+					if ( ( poX == 0 ) && ( poY == 0 ) )		continue;	// vOther == vertex.mprev
+				var voX = otherX - vertX,  voY = otherY - vertY;
+					if ( ( voX == 0 ) && ( voY == 0 ) )		continue;	// vOther == vertex
+				var noX = otherX - nextX,  noY = otherY - nextY;
+					if ( ( noX == 0 ) && ( noY == 0 ) )		continue;	// vOther == vertex.mnext
+
+				// if vOther is inside triangle abc -> not an ear to cut off
+				if ( ( ( vnX * voY - vnY * voX ) >= PNLTRI.Math.EPSILON_N ) &&
+					 ( ( pvX * poY - pvY * poX ) >= PNLTRI.Math.EPSILON_N ) &&
+					 ( ( npX * noY - npY * noX ) >= PNLTRI.Math.EPSILON_N ) ) return false;
+			}
+			return true;
+
+		};
+
+		var myPolyData = this.polyData;
+		var startSeg = myPolyData.getFirstSegment();
+
+		// create a counter-clockwise ordered doubly linked list (monoChain links)
+
+		var cursor = startSeg;
+		if ( myPolyData.isClockWise( startSeg ) ) {
+			do {	// reverses chain order
+				cursor.mprev = cursor.snext;
+				cursor.mnext = cursor.sprev;
+				cursor = cursor.sprev;
+			} while ( cursor != startSeg );
+			myPolyData.set_PolyLeft_wrong(0);
+		} else {
+			do {
+				cursor.mprev = cursor.sprev;
+				cursor.mnext = cursor.snext;
+				cursor = cursor.snext;
+			} while ( cursor != startSeg );
+		}
+
+		//  remove all vertices except 2, creating 1 triangle every time
+
+		var vertex = startSeg;
+		var fullLoop = vertex;   // prevent infinite loop on "defective" polygons
+
+		while ( vertex.mnext != vertex.mprev ) {
+			if ( isEarAt( vertex ) ) {
+				// found a triangle ear to cut off
+				this.polyData.addTriangle( vertex.mprev.vFrom, vertex.vFrom, vertex.mnext.vFrom );
+				// remove vertex from the remaining chain
+				vertex.mprev.mnext = vertex.mnext;
+				vertex.mnext.mprev = vertex.mprev;
+				vertex = vertex.mnext;
+				fullLoop = vertex;			// reset error detection
+			} else {
+				vertex = vertex.mnext;
+				// loop?: probably non-simple polygon -> stop with error
+				if ( vertex == fullLoop )	return false;
+			}
+		}
+
+		return true;
+
+	},
+
+/*	// takes one element of a double linked segment list
+	//	works on array of vertices
+
+	triangulate_polygon_no_holes: function () {
+		var startSeg = this.polyData.getFirstSegment();
+
+		function vertList( inStartSeg ) {
+			var verts = [];
+			// we want a counter-clockwise polygon in verts
+			var doubleArea = 0.0;
+			var cursor = inStartSeg;
+			var p,q;
+			var idx = 0;
+			do {
+				p = cursor.sprev.vFrom;
+				q = cursor.vFrom;
+				doubleArea += p.x * q.y - q.x * p.y;
+				verts[idx++] = q;
+				cursor = cursor.snext;
+			} while ( cursor != inStartSeg );
+			if ( doubleArea < 0.0 ) {
+				verts = verts.reverse();
+				var tmp = verts.pop();
+				verts.unshift( tmp );
+			}
+			return	verts;
+		}
+
+		function snip( verts, u, v, w, n ) {
+
+			var ax = verts[ u ].x;
+			var ay = verts[ u ].y;
+
+			var bx = verts[ v ].x;
+			var by = verts[ v ].y;
+
+			var cx = verts[ w ].x;
+			var cy = verts[ w ].y;
+
+			if ( PNLTRI.Math.EPSILON_P > ( ( bx - ax ) * ( cy - ay ) - ( by - ay ) * ( cx - ax ) ) ) return false;
+
+			var aX, aY, bX, bY, cX, cY;
+
+			aX = cx - bx;  aY = cy - by;
+			bX = ax - cx;  bY = ay - cy;
+			cX = bx - ax;  cY = by - ay;
+
+			var p, px, py;
+
+			var apx, apy, bpx, bpy, cpx, cpy;
+			var cCROSSap, bCROSScp, aCROSSbp;
+
+			for ( p = 0; p < n; p ++ ) {
+
+				px = verts[ p ].x
+				py = verts[ p ].y
+
+				apx = px - ax;  apy = py - ay;
+					if ( ( apx == 0 ) && ( apy == 0 ) )		continue;
+				bpx = px - bx;  bpy = py - by;
+					if ( ( bpx == 0 ) && ( bpy == 0 ) )		continue;
+				cpx = px - cx;  cpy = py - cy;
+					if ( ( cpx == 0 ) && ( cpy == 0 ) )		continue;
+
+				// see if p is inside triangle abc
+
+				aCROSSbp = aX * bpy - aY * bpx;
+				cCROSSap = cX * apy - cY * apx;
+				bCROSScp = bX * cpy - bY * cpx;
+
+				if ( ( aCROSSbp >= PNLTRI.Math.EPSILON_N ) &&
+					 ( bCROSScp >= PNLTRI.Math.EPSILON_N ) &&
+					 ( cCROSSap >= PNLTRI.Math.EPSILON_N ) ) return false;
+
+			}
+
+			return true;
+
+		};
+
+		var result = [];
+
+		var	verts = vertList( startSeg );
+
+		var n = verts.length;
+		var nv = n;
+
+		var u, v, w;
+
+		//  remove nv - 2 vertices, creating 1 triangle every time
+
+		var count = 2 * nv;   // error detection
+
+		for ( v = nv - 1; nv > 2; ) {
+
+			// if we loop, it is probably a non-simple polygon
+
+			if ( ( count -- ) <= 0 )	return false;
+
+			// three consecutive vertices in current polygon, <u,v,w>
+
+			u = v; 	 	if ( nv <= u ) u = 0;     // previous
+			v = u + 1;  if ( nv <= v ) v = 0;     // new v
+			w = v + 1;  if ( nv <= w ) w = 0;     // next
+
+			if ( snip( verts, u, v, w, nv ) ) {
+
+				// output Triangle
+
+				this.polyData.addTriangle( verts[ u ], verts[ v ], verts[ w ] );
+
+				// remove v from the remaining polygon
+
+				var s, t;
+
+				for ( s = v, t = v + 1; t < nv; s++, t++ ) {
+
+					verts[ s ] = verts[ t ];
+
+				}
+
+				nv --;
+
+				v --;
+				if ( v < 0 )	v = nv-1;
+
+				// reset error detection counter
+
+				count = 2 * nv;
+
+			}
+
+		}
+
+		return true;
+
+	},		*/
+
+};
+
+
+// File:src/math/pnltri/Trapezoider.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ *
+ *	Algorithm to create the trapezoidation of a polygon with holes
+ *	 according to Seidel's algorithm [Sei91]
+ */
+
+/** @constructor */
+PNLTRI.Trapezoid = function ( inHigh, inLow, inLeft, inRight ) {
+
+	this.vHigh = inHigh ? inHigh : { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY };
+	this.vLow  = inLow  ? inLow  : { x: Number.NEGATIVE_INFINITY, y: Number.NEGATIVE_INFINITY };
+
+	this.lseg = inLeft;
+	this.rseg = inRight;
+
+//	this.uL = null;				// -> Trapezoid: upper left neighbor
+//	this.uR = null;				// -> Trapezoid: upper right neighbor
+//	this.dL = null;				// -> Trapezoid: lower left neighbor
+//	this.dR = null;				// -> Trapezoid: lower right neighbor
+
+//	this.sink = null;			// link to corresponding SINK-Node in QueryStructure
+
+//	this.usave = null;			// temp: uL/uR, preserved for next step
+//	this.uleft = null;			// temp: from uL? (true) or uR (false)
+
+	this.depth = -1;			// no depth assigned yet
+
+	this.monoDone = false;		// monotonization: done with trying to split this trapezoid ?
+
+};
+
+PNLTRI.Trapezoid.prototype = {
+
+	constructor: PNLTRI.Trapezoid,
+
+	clone: function () {
+		var newTrap = new PNLTRI.Trapezoid( this.vHigh, this.vLow, this.lseg, this.rseg );
+
+		newTrap.uL = this.uL;
+		newTrap.uR = this.uR;
+
+		newTrap.dL = this.dL;
+		newTrap.dR = this.dR;
+
+		newTrap.sink = this.sink;
+
+		return	newTrap;
+	},
+
+
+	splitOffLower: function ( inSplitPt ) {
+		var trLower = this.clone();				// new lower trapezoid
+
+		this.vLow = trLower.vHigh = inSplitPt;
+
+		// L/R unknown, anyway changed later
+		this.dL = trLower;		// setBelow
+		trLower.uL = this;		// setAbove
+		this.dR = trLower.uR = null;
+
+		// setAbove
+		if ( trLower.dL )	trLower.dL.uL = trLower;	// dL always connects to uL
+		if ( trLower.dR )	trLower.dR.uR = trLower;	// dR always connects to uR
+
+		return	trLower;
+	},
+
+};
+
+
+/*==============================================================================
+ *
+ *============================================================================*/
+
+// PNLTRI.qsCounter = 0;
+
+/** @constructor */
+PNLTRI.QsNode = function ( inTrapezoid ) {
+//	this.qsId = PNLTRI.qsCounter++;				// Debug only
+	// Only SINK-nodes are created directly.
+	// The others originate from splitting trapezoids
+	// - by a horizontal line: SINK-Node -> Y-Node
+	// - by a segment: SINK-Node -> X-Node
+	this.trap = inTrapezoid;
+	inTrapezoid.sink = this;
+};
+
+PNLTRI.QsNode.prototype = {
+
+	constructor: PNLTRI.QsNode,
+
+};
+
+/*==============================================================================
+ *
+ *============================================================================*/
+
+/** @constructor */
+PNLTRI.QueryStructure = function ( inPolygonData ) {
+	// initialise the query structure and trapezoid list
+	var initialTrap = new PNLTRI.Trapezoid( null, null, null, null );
+	this.trapArray = [];
+	this.appendTrapEntry( initialTrap );
+
+//	PNLTRI.qsCounter = 0;
+	this.root = new PNLTRI.QsNode( initialTrap );
+
+	if ( inPolygonData ) {
+		/*
+		 * adds and initializes specific attributes for all segments
+		 *	// -> QueryStructure: roots of partial tree where vertex is located
+		 *	rootFrom, rootTo:	for vFrom, vTo
+		 *	// marker
+		 *	is_inserted:	already inserted into QueryStructure ?
+		 */
+		var segListArray = inPolygonData.getSegments();
+		for ( var i = 0; i < segListArray.length; i++ ) {
+			segListArray[i].rootFrom = segListArray[i].rootTo = this.root;
+			segListArray[i].is_inserted = false;
+		}
+	}
+};
+
+PNLTRI.QueryStructure.prototype = {
+
+	constructor: PNLTRI.QueryStructure,
+
+	getRoot: function () {
+		return this.root;
+	},
+
+
+	appendTrapEntry: function ( inTrapezoid ) {
+		inTrapezoid.trapID = this.trapArray.length;			// for Debug
+		this.trapArray.push( inTrapezoid );
+	},
+	cloneTrap: function ( inTrapezoid ) {
+		var trap = inTrapezoid.clone();
+		this.appendTrapEntry( trap );
+		return	trap;
+	},
+
+
+	splitNodeAtPoint: function ( inNode, inPoint, inReturnUpper ) {
+		// inNode: SINK-Node with trapezoid containing inPoint
+		var trUpper = inNode.trap;							// trUpper: trapezoid includes the point
+		if (trUpper.vHigh == inPoint)	return	inNode;				// (ERROR) inPoint is already inserted
+		if (trUpper.vLow == inPoint)	return	inNode;				// (ERROR) inPoint is already inserted
+		var trLower = trUpper.splitOffLower( inPoint );		// trLower: new lower trapezoid
+		this.appendTrapEntry( trLower );
+
+		// SINK-Node -> Y-Node
+		inNode.yval = inPoint;
+		inNode.trap = null;
+
+		inNode.right = new PNLTRI.QsNode( trUpper );		// Upper trapezoid sink
+		inNode.left = new PNLTRI.QsNode( trLower );			// Lower trapezoid sink
+
+		return	inReturnUpper ? trUpper.sink : trLower.sink;
+	},
+
+
+	/*
+	 * Mathematics & Geometry helper methods
+	 */
+
+	fpEqual: function ( inNum0, inNum1 ) {
+		 return		Math.abs( inNum0 - inNum1 ) < PNLTRI.Math.EPSILON_P;
+	},
+
+
+	// Checks, whether the vertex inPt is to the left of line segment inSeg.
+	//	Returns:
+	//		>0: inPt is left of inSeg,
+	//		<0: inPt is right of inSeg,
+	//		=0: inPt is co-linear with inSeg
+	//
+	//	ATTENTION: always viewed from -y, not as if moving along the segment chain !!
+
+	is_left_of: function ( inSeg, inPt, inBetweenY ) {
+		var retVal;
+		var dXfrom = inSeg.vFrom.x - inPt.x;
+		var dXto = inSeg.vTo.x - inPt.x;
+		var dYfromZero = this.fpEqual( inSeg.vFrom.y, inPt.y );
+		if ( this.fpEqual( inSeg.vTo.y, inPt.y ) ) {
+			if ( dYfromZero )	return 0;		// all points on a horizontal line
+			retVal = dXto;
+		} else if ( dYfromZero ) {
+			retVal = dXfrom;
+/*		} else if ( inBetweenY && ( dXfrom * dXto > 0 ) ) {
+			// both x-coordinates of inSeg are on the same side of inPt
+			if ( Math.abs( dXto ) >= PNLTRI.Math.EPSILON_P )	return	dXto;
+			retVal = dXfrom;	*/
+		} else {
+			if ( inSeg.upward ) {
+				return	PNLTRI.Math.ptsCrossProd( inSeg.vFrom, inSeg.vTo, inPt );
+			} else {
+				return	PNLTRI.Math.ptsCrossProd( inSeg.vTo, inSeg.vFrom, inPt );
+			}
+		}
+		if ( Math.abs( retVal ) < PNLTRI.Math.EPSILON_P )		return	0;
+		return	retVal;
+	},
+
+
+	/*
+	 * Query structure main methods
+	 */
+
+	//	This method finds the Node in the QueryStructure corresponding
+	//   to the trapezoid that contains inPt, starting from Node rootFrom/rootTo.
+	//  If inPt lies on a border (y-line or segment) inPtOther is used
+	//	 to determine on which side.
+
+	// TODO: may need to prevent infinite loop in case of messed up
+	//	trapezoid structure (s. test_add_segment_special_6)
+
+	segNodes: function ( inSegment ) {
+		this.ptNode( inSegment, true );
+		this.ptNode( inSegment, false );
+	},
+
+	ptNode: function ( inSegment, inUseFrom ) {
+		if ( inUseFrom ) {
+			var inPt = inSegment.vFrom;
+			var inPtOther = inSegment.vTo;
+			var	qsNode = inSegment.rootFrom;
+		} else {
+			inPt = inSegment.vTo;
+			inPtOther = inSegment.vFrom;
+			qsNode = inSegment.rootTo;
+		}
+		var compPt, compRes;
+		var isInSegmentShorter;
+
+		while ( qsNode ) {
+			if ( qsNode.yval ) {			// Y-Node: horizontal line
+											// 4 times as often as X-Node
+				qsNode = ( PNLTRI.Math.compare_pts_yx( ( ( inPt == qsNode.yval ) ?	// is the point already inserted ?
+									inPtOther : inPt ), qsNode.yval ) == -1 ) ?
+									qsNode.left : qsNode.right;						// below : above
+			} else if ( qsNode.seg ) {		// X-Node: segment (~vertical line)
+											// 0.8 to 1.5 times as often as SINK-Node
+				if ( ( inPt == qsNode.seg.vFrom ) ||
+					 ( inPt == qsNode.seg.vTo ) ) {
+					// the point is already inserted
+					if ( this.fpEqual( inPt.y, inPtOther.y ) ) {
+						// horizontal segment
+						if ( !this.fpEqual( qsNode.seg.vFrom.y, qsNode.seg.vTo.y ) ) {
+							qsNode = ( inPtOther.x < inPt.x ) ? qsNode.left : qsNode.right;		// left : right
+						} else {	// co-linear horizontal reversal: test_add_segment_special_7
+							if ( inPt == qsNode.seg.vFrom ) {
+								// connected at qsNode.seg.vFrom
+//								console.log("ptNode: co-linear horizontal reversal, connected at qsNode.seg.vFrom", inUseFrom, inSegment, qsNode )
+								isInSegmentShorter = inSegment.upward ?
+										( inPtOther.x >= qsNode.seg.vTo.x ) :
+										( inPtOther.x <  qsNode.seg.vTo.x );
+								qsNode = ( isInSegmentShorter ?
+												inSegment.sprev.upward :
+												qsNode.seg.snext.upward ) ? qsNode.right : qsNode.left;		// above : below
+							} else {
+								// connected at qsNode.seg.vTo
+//								console.log("ptNode: co-linear horizontal reversal, connected at qsNode.seg.vTo", inUseFrom, inSegment, qsNode );
+								isInSegmentShorter = inSegment.upward ?
+										( inPtOther.x <  qsNode.seg.vFrom.x ) :
+										( inPtOther.x >= qsNode.seg.vFrom.x );
+								qsNode = ( isInSegmentShorter ?
+												inSegment.snext.upward :
+												qsNode.seg.sprev.upward ) ? qsNode.left : qsNode.right;		// below : above
+							}
+						}
+						continue;
+					} else {
+						compRes = this.is_left_of( qsNode.seg, inPtOther, false );
+						if ( compRes == 0 ) {
+							// co-linear reversal (not horizontal)
+							//	a co-linear continuation would not reach this point
+							//  since the previous Y-node comparison would have led to a sink instead
+//							console.log("ptNode: co-linear, going back on previous segment", inPt, inPtOther, qsNode );
+							// now as we have two consecutive co-linear segments we have to avoid a cross-over
+							//	for this we need the far point on the "next" segment to the SHORTER of our two
+							//	segments to avoid that "next" segment to cross the longer of our two segments
+							if ( inPt == qsNode.seg.vFrom ) {
+								// connected at qsNode.seg.vFrom
+//								console.log("ptNode: co-linear, going back on previous segment, connected at qsNode.seg.vFrom", inPt, inPtOther, qsNode );
+								isInSegmentShorter = inSegment.upward ?
+										( inPtOther.y >= qsNode.seg.vTo.y ) :
+										( inPtOther.y <  qsNode.seg.vTo.y );
+								compRes = isInSegmentShorter ?
+										this.is_left_of( qsNode.seg, inSegment.sprev.vFrom, false ) :
+										-this.is_left_of( qsNode.seg, qsNode.seg.snext.vTo, false );
+							} else {
+								// connected at qsNode.seg.vTo
+//								console.log("ptNode: co-linear, going back on previous segment, connected at qsNode.seg.vTo", inPt, inPtOther, qsNode );
+								isInSegmentShorter = inSegment.upward ?
+										( inPtOther.y <  qsNode.seg.vFrom.y ) :
+										( inPtOther.y >= qsNode.seg.vFrom.y );
+								compRes = isInSegmentShorter ?
+										this.is_left_of( qsNode.seg, inSegment.snext.vTo, false ) :
+										-this.is_left_of( qsNode.seg, qsNode.seg.sprev.vFrom, false );
+							}
+						}
+					}
+				} else {
+/*					if ( ( PNLTRI.Math.compare_pts_yx( inPt, qsNode.seg.vFrom ) *			// TODO: Testcase
+							PNLTRI.Math.compare_pts_yx( inPt, qsNode.seg.vTo )
+						   ) == 0 ) {
+						console.log("ptNode: Pts too close together#2: ", inPt, qsNode.seg );
+					}		*/
+					compRes = this.is_left_of( qsNode.seg, inPt, true );
+					if ( compRes == 0 ) {
+						// touching: inPt lies on qsNode.seg but is none of its endpoints
+						//	should happen quite seldom
+						compRes = this.is_left_of( qsNode.seg, inPtOther, false );
+						if ( compRes == 0 ) {
+							// co-linear: inSegment and qsNode.seg
+							//	includes case with inPtOther connected to qsNode.seg
+							var tmpPtOther = inUseFrom ? inSegment.sprev.vFrom : inSegment.snext.vTo;
+							compRes = this.is_left_of( qsNode.seg, tmpPtOther, false );
+						}
+					}
+				}
+				if ( compRes > 0 ) {
+					qsNode = qsNode.left;
+				} else if ( compRes < 0 ) {
+					qsNode = qsNode.right;
+				} else {
+					// ???	TODO - not reached with current tests
+					//				possible at all ?
+					return qsNode;
+					// qsNode = qsNode.left;		// left
+					// qsNode = qsNode.right;		// right
+				}
+			} else {		// SINK-Node: trapezoid area
+							// least often
+				if ( !qsNode.trap ) {
+					console.log("ptNode: unknown type", qsNode);
+				}
+				if ( inUseFrom )	inSegment.rootFrom = qsNode
+				else				inSegment.rootTo = qsNode;
+				return qsNode;
+			}
+		}	// end while - should not exit here
+	},
+
+
+ 	// Add a new segment into the trapezoidation and update QueryStructure and Trapezoids
+	// 1) locates the two endpoints of the segment in the QueryStructure and inserts them
+	// 2) goes from the high-end trapezoid down to the low-end trapezoid
+	//		changing all the trapezoids in between.
+	// Except for the high-end and low-end no new trapezoids are created.
+	// For all in between either:
+	// - the existing trapezoid is restricted to the left of the new segment
+	//		and on the right side the trapezoid from above is extended downwards
+	// - or the other way round:
+	//	 the existing trapezoid is restricted to the right of the new segment
+	//		and on the left side the trapezoid from above is extended downwards
+
+	add_segment: function ( inSegment ) {
+		var scope = this;
+
+		// functions handling the relationship to the upper neighbors (uL, uR)
+		//	of trNewLeft and trNewRight
+
+		function fresh_seg_or_upward_cusp() {
+			// trCurrent has at most 1 upper neighbor
+			//	and should also have at least 1, since the high-point trapezoid
+			//	has been split off another one, which is now above
+			var trUpper = trCurrent.uL || trCurrent.uR;
+
+			// trNewLeft and trNewRight CANNOT have been extended from above
+			if ( trUpper.dL && trUpper.dR ) {
+				// upward cusp: top forms a triangle
+
+				// ATTENTION: the decision whether trNewLeft or trNewRight is the
+				//	triangle trapezoid formed by the two segments has already been taken
+				//	when selecting trCurrent as the left or right lower neighbor to trUpper !!
+
+				if ( trCurrent == trUpper.dL ) {
+					//	*** Case: FUC_UC_LEFT; prev: ----
+					// console.log( "fresh_seg_or_upward_cusp: upward cusp, new seg to the left!" );
+					//		  upper
+					//   -------*-------
+					//		   + \
+					//	  NL  +   \
+					//		 +	NR \
+					//		+		\
+					trNewRight.uL	= null;			// setAbove; trNewRight.uR, trNewLeft unchanged
+					trUpper.dL		= trNewLeft;	// setBelow; dR: unchanged, NEVER null
+				} else {
+					//	*** Case: FUC_UC_RIGHT; prev: ----
+					// console.log( "fresh_seg_or_upward_cusp: upward cusp, new seg from the right!" );
+					//		  upper
+					//   -------*-------
+					//		   / +
+					//		  /   +	 NR
+					//		 /	NL +
+					//		/		+
+					trNewLeft.uR	= null;			// setAbove; trNewLeft.uL, trNewRight unchanged
+					trUpper.dR		= trNewRight;	// setBelow; dL: unchanged, NEVER null
+				}
+			} else {
+				//	*** Case: FUC_FS; prev: "splitOffLower"
+				// console.log( "fresh_seg_or_upward_cusp: fresh segment, high adjacent segment still missing" );
+				//		  upper
+				//   -------*-------
+				//		   +
+				//	  NL  +
+				//		 +	NR
+				//		+
+				trNewRight.uL = null;			// setAbove; trNewLeft unchanged, set by "splitOffLower"
+				trNewRight.uR = trUpper;
+				trUpper.dR = trNewRight;		// setBelow; trUpper.dL unchanged, set by "splitOffLower"
+			}
+ 		}
+
+		function continue_chain_from_above() {
+			// trCurrent has at least 2 upper neighbors
+			if ( trCurrent.usave ) {
+				// 3 upper neighbors (part II)
+				if ( trCurrent.uleft ) {
+					//	*** Case: CC_3UN_LEFT; prev: 1B_3UN_LEFT
+					// console.log( "continue_chain_from_above: 3 upper neighbors (part II): u0a, u0b, uR(usave)" );
+					// => left gets one, right gets two of the upper neighbors
+					// !! trNewRight cannot have been extended from above
+					//		and trNewLeft must have been !!
+					//		   +		/
+					//	  C.uL  + C.uR / C.usave
+					//    - - - -+----*----------
+					//		NL	  +		NR
+					trNewRight.uL = trCurrent.uR;		// setAbove
+					trNewRight.uR = trCurrent.usave;
+					trNewRight.uL.dL = trNewRight;		// setBelow; trNewRight.uL.dR == null, unchanged
+					trNewRight.uR.dR = trNewRight;		// setBelow; trNewRight.uR.dL == null, unchanged
+				} else {
+					//	*** Case: CC_3UN_RIGHT; prev: 1B_3UN_RIGHT
+					// console.log( "continue_chain_from_above: 3 upper neighbors (part II): uL(usave), u1a, u1b" );
+					// => left gets two, right gets one of the upper neighbors
+					// !! trNewLeft cannot have been extended from above
+					//		and trNewRight must have been !!
+					//			\		 +
+					//	 C.usave \ C.uL + C.uR
+					//   ---------*----+- - - -
+					//			NL    +   NR
+					trNewLeft.uR = trCurrent.uL;		// setAbove; first uR !!!
+					trNewLeft.uL = trCurrent.usave;
+					trNewLeft.uL.dL = trNewLeft;		// setBelow; dR == null, unchanged
+					trNewLeft.uR.dR = trNewLeft;		// setBelow; dL == null, unchanged
+				}
+				trNewLeft.usave = trNewRight.usave = null;
+			} else if ( trCurrent.vHigh == trFirst.vHigh ) {		// && meetsHighAdjSeg ??? TODO
+				//	*** Case: CC_2UN_CONN; prev: ----
+				// console.log( "continue_chain_from_above: 2 upper neighbors, fresh seg, continues high adjacent seg" );
+				// !! trNewLeft and trNewRight cannot have been extended from above !!
+				//	  C.uL	 /  C.uR
+				//   -------*---------
+				//	   NL  +	NR
+				trNewRight.uR.dR = trNewRight;			// setBelow; dL == null, unchanged
+				trNewLeft.uR = trNewRight.uL = null;	// setAbove; trNewLeft.uL, trNewRight.uR unchanged
+			} else {
+				//	*** Case: CC_2UN; prev: 1B_1UN_CONT, 2B_NOCON_RIGHT/LEFT, 2B_TOUCH_RIGHT/LEFT, 2B_COLIN_RIGHT/LEFT
+				// console.log( "continue_chain_from_above: simple case, 2 upper neighbors (no usave, not fresh seg)" );
+				// !! trNewLeft XOR trNewRight will have been extended from above !!
+				//	  C.uL	 +  C.uR
+				//   -------+---------
+				//	   NL  +	NR
+				if ( trNewRight == trCurrent ) {		// trNewLeft has been extended from above
+					// setAbove
+					trNewRight.uL = trNewRight.uR;
+					trNewRight.uR = null;
+					// setBelow; dR: unchanged, is NOT always null (prev: 2B_NOCON_LEFT, 2B_TOUCH_LEFT, 2B_COLIN_LEFT)
+					trNewRight.uL.dL = trNewRight;
+				} else {								// trNewRight has been extended from above
+					trNewLeft.uR = trNewLeft.uL;	// setAbove; first uR !!!
+					trNewLeft.uL = null;
+				}
+			}
+		}
+
+		// functions handling the relationship to the lower neighbors (dL, dR)
+		//	of trNewLeft and trNewRight
+		// trNewLeft or trNewRight MIGHT have been extended from above
+		//  !! in that case dL and dR are different from trCurrent and MUST be set here !!
+
+		function only_one_trap_below( inTrNext ) {
+
+			if ( trCurrent.vLow == trLast.vLow ) {
+				// final part of segment
+
+				if ( meetsLowAdjSeg ) {
+					// downward cusp: bottom forms a triangle
+
+					// ATTENTION: the decision whether trNewLeft and trNewRight are to the
+					//	left or right of the already inserted segment the new one meets here
+					//	has already been taken when selecting trLast to the left or right
+					//	of that already inserted segment !!
+
+					if ( trCurrent.dL ) {
+						//	*** Case: 1B_DC_LEFT; next: ----
+						// console.log( "only_one_trap_below: downward cusp, new seg from the left!" );
+						//		+		/
+						//		 +  NR /
+						//	  NL  +	  /
+						//		   + /
+						//   -------*-------
+						//	   C.dL = next
+
+						// setAbove
+						inTrNext.uL = trNewLeft;	// uR: unchanged, NEVER null
+						// setBelow part 1
+						trNewLeft.dL = inTrNext;
+						trNewRight.dR = null;
+					} else {
+						//	*** Case: 1B_DC_RIGHT; next: ----
+						// console.log( "only_one_trap_below: downward cusp, new seg to the right!" );
+						//		\		+
+						//		 \  NL +
+						//		  \	  +  NR
+						//		   \ +
+						//   -------*-------
+						//	   C.dR = next
+
+						// setAbove
+						inTrNext.uR = trNewRight;	// uL: unchanged, NEVER null
+						// setBelow part 1
+						trNewLeft.dL = null;
+						trNewRight.dR = inTrNext;
+					}
+				} else {
+					//	*** Case: 1B_1UN_END; next: ----
+					// console.log( "only_one_trap_below: simple case, new seg ends here, low adjacent seg still missing" );
+					//			  +
+					//		NL	 +  NR
+					//			+
+					//   ------*-------
+					//		  next
+
+					// setAbove
+					inTrNext.uL = trNewLeft;									// trNewLeft must
+					inTrNext.uR = trNewRight;		// must
+					// setBelow part 1
+					trNewLeft.dL = trNewRight.dR = inTrNext;					// Error
+//					trNewRight.dR = inTrNext;
+				}
+				// setBelow part 2
+				trNewLeft.dR = trNewRight.dL = null;
+			} else {
+				// NOT final part of segment
+
+				if ( inTrNext.uL && inTrNext.uR ) {
+					// inTrNext has two upper neighbors
+					// => a segment ends on the upper Y-line of inTrNext
+					// => inTrNext has temporarily 3 upper neighbors
+					// => marks whether the new segment cuts through
+					//		uL or uR of inTrNext and saves the other in .usave
+					if ( inTrNext.uL == trCurrent ) {
+						//	*** Case: 1B_3UN_LEFT; next: CC_3UN_LEFT
+						// console.log( "only_one_trap_below: inTrNext has 3 upper neighbors (part I): u0a, u0b, uR(usave)" );
+						//		 +		  /
+						//	  NL  +	 NR	 /
+						//		   +	/
+						//   - - - -+--*----
+						//			 +
+						//		  next
+//						if ( inTrNext.uR != trNewRight ) {		// for robustness	TODO: prevent
+							inTrNext.usave = inTrNext.uR;
+							inTrNext.uleft = true;
+							// trNewLeft: L/R undefined, will be extended down and changed anyway
+						// } else {
+							// ERROR: should not happen
+							// console.log( "ERR add_segment: Trapezoid Loop right", inTrNext, trCurrent, trNewLeft, trNewRight, inSegment, this );
+//						}
+					} else {
+						//	*** Case: 1B_3UN_RIGHT; next: CC_3UN_RIGHT
+						// console.log( "only_one_trap_below: inTrNext has 3 upper neighbors (part I): uL(usave), u1a, u1b" );
+						//	 \		   +
+						//	  \	  NL  +  NR
+						//	   \	 +
+						//   ---*---+- - - -
+						//		   +
+						//		  next
+//						if ( inTrNext.uL != trNewLeft ) {		// for robustness	TODO: prevent
+							inTrNext.usave = inTrNext.uL;
+							inTrNext.uleft = false;
+							// trNewRight: L/R undefined, will be extended down and changed anyway
+						// } else {
+							// ERROR: should not happen
+							// console.log( "ERR add_segment: Trapezoid Loop left", inTrNext, trCurrent, trNewLeft, trNewRight, inSegment, this );
+//						}
+					}
+				//} else {
+					//	*** Case: 1B_1UN_CONT; next: CC_2UN
+					// console.log( "only_one_trap_below: simple case, new seg continues down" );
+					//			  +
+					//		NL	 +  NR
+					//			+
+					//   ------+-------
+					//	 	  +
+					//		next
+
+					// L/R for one side undefined, which one is not fixed
+					//	but that one will be extended down and changed anyway
+					// for the other side, vLow must lie at the opposite end
+					//	thus both are set accordingly
+				}
+				// setAbove
+				inTrNext.uL = trNewLeft;
+				inTrNext.uR = trNewRight;
+				// setBelow
+				trNewLeft.dR = trNewRight.dL = inTrNext;
+				trNewLeft.dL = trNewRight.dR = null;
+			}
+		}
+
+		function two_trap_below() {
+			// Find out which one (dL,dR) is intersected by this segment and
+			//	continue down that one
+			var trNext;
+			if ( ( trCurrent.vLow == trLast.vLow ) && meetsLowAdjSeg ) {	// meetsLowAdjSeg necessary? TODO
+				//	*** Case: 2B_CON_END; next: ----
+				// console.log( "two_trap_below: finished, meets low adjacent segment" );
+				//			  +
+				//		NL	 +  NR
+				//			+
+				//   ------*-------
+				//	 		\  C.dR
+				//	  C.dL	 \
+
+				// setAbove
+				trCurrent.dL.uL = trNewLeft;
+				trCurrent.dR.uR = trNewRight;
+				// setBelow; sequence of assignments essential, just in case: trCurrent == trNewLeft
+				trNewLeft.dL = trCurrent.dL;
+				trNewRight.dR = trCurrent.dR;
+				trNewLeft.dR = trNewRight.dL = null;
+
+				trNext = null;	      	// segment finished
+			} else {
+				// setAbove part 1
+				trCurrent.dL.uL = trNewLeft;
+				trCurrent.dR.uR = trNewRight;
+
+				var goDownRight;
+				// passes left or right of an already inserted NOT connected segment
+				//	trCurrent.vLow: high-end of existing segment
+				var compRes = scope.is_left_of( inSegment, trCurrent.vLow, true );
+				if ( compRes > 0 ) {				// trCurrent.vLow is left of inSegment
+					//	*** Case: 2B_NOCON_RIGHT; next: CC_2UN
+					// console.log( "two_trap_below: (intersecting dR)" );
+					//		 +
+					//	  NL  +  NR
+					//		   +
+					//   ---*---+- - - -
+					//		 \	 +
+					//	 C.dL \	C.dR
+					goDownRight = true;
+				} else if ( compRes < 0 ) {			// trCurrent.vLow is right of inSegment
+					//	*** Case: 2B_NOCON_LEFT; next: CC_2UN
+					// console.log( "two_trap_below: (intersecting dL)" );
+					//			  +
+					//		NL	 +  NR
+					//			+
+					//    - - -+---*-------
+					//	 	  +		\  C.dR
+					//	 	 C.dL	 \
+					goDownRight = false;
+				} else {							// trCurrent.vLow lies ON inSegment
+					var vLowSeg = trCurrent.dL.rseg;
+					var directionIsUp = vLowSeg.upward;
+					var otherPt = directionIsUp ? vLowSeg.vFrom : vLowSeg.vTo;
+					compRes = scope.is_left_of( inSegment, otherPt, false );
+					if ( compRes > 0 ) {				// otherPt is left of inSegment
+						//	*** Case: 2B_TOUCH_RIGHT; next: CC_2UN
+						// console.log( "two_trap_below: vLow ON new segment, touching from right" );
+						//		 +
+						//	  NL  +  NR
+						//		   +
+						//   -------*- - - -
+						//		   / +
+						//	 C.dL /	C.dR
+						goDownRight = true;		// like intersecting dR
+					} else if ( compRes < 0 ) {			// otherPt is right of inSegment
+						//	*** Case: 2B_TOUCH_LEFT; next: CC_2UN
+						// console.log( "two_trap_below: vLow ON new segment, touching from left" );
+						//			  +
+						//		NL	 +  NR
+						//			+
+						//    - - -*-------
+						//	 	  +	\  C.dR
+						//	  C.dL	 \
+						goDownRight = false;	// like intersecting dL
+					} else {							// otherPt lies ON inSegment
+						vLowSeg = directionIsUp ? vLowSeg.snext : vLowSeg.sprev;		// other segment with trCurrent.vLow
+						otherPt = directionIsUp ? vLowSeg.vTo : vLowSeg.vFrom;
+						compRes = scope.is_left_of( inSegment, otherPt, false );
+						if ( compRes > 0 ) {				// otherPt is left of inSegment
+							//	*** Case: 2B_COLIN_RIGHT; next: CC_2UN
+							// console.log( "two_trap_below: vLow ON new segment, touching from right" );
+							//		  +
+							//	  NL   +  NR
+							//   -------*- - - -
+							//	  C.dL 	\+  C.dR
+							//			 \+
+							goDownRight = true;		// like intersecting dR
+					//	} else if ( compRes == 0 ) {		//	NOT POSSIBLE, since 3 points on a line is prevented during input of polychains
+					//		goDownRight = true;		// like intersecting dR
+						} else {							// otherPt is right of inSegment
+							//	*** Case: 2B_COLIN_LEFT; next: CC_2UN
+							// console.log( "two_trap_below: vLow ON new segment, touching from left" );
+							//			   +
+							//		NL	  +  NR
+							//    - - - -*-------
+							//	  C.dL	+/  C.dR
+							//		   +/
+							goDownRight = false;		// TODO: for test_add_segment_special_4 -> like intersecting dL
+						}
+					}
+				}
+				if ( goDownRight ) {
+					trNext = trCurrent.dR;
+					// setAbove part 2
+					trCurrent.dR.uL = trNewLeft;
+					// setBelow part 1
+					trNewLeft.dL = trCurrent.dL;
+					trNewRight.dR = null;	// L/R undefined, will be extended down and changed anyway
+				} else {
+					trNext = trCurrent.dL;
+					// setAbove part 2
+					trCurrent.dL.uR = trNewRight;
+					// setBelow part 1
+					trNewRight.dR = trCurrent.dR;
+					trNewLeft.dL = null;	// L/R undefined, will be extended down and changed anyway
+				}
+				// setBelow part 2
+				trNewLeft.dR = trNewRight.dL = trNext;
+			}
+
+ 			return	trNext;
+		}
+
+		//
+		//	main function body
+		//
+
+/*		if ( ( inSegment.sprev.vTo != inSegment.vFrom ) || ( inSegment.vTo != inSegment.snext.vFrom ) ) {
+			console.log( "add_segment: inconsistent point order of adjacent segments: ",
+						 inSegment.sprev.vTo, inSegment.vFrom, inSegment.vTo, inSegment.snext.vFrom );
+			return;
+		}		*/
+
+		//	Find the top-most and bottom-most intersecting trapezoids -> rootXXX
+		this.segNodes( inSegment );
+
+		var segLowVert , segLowNode, meetsLowAdjSeg;		// y-min vertex
+		var segHighVert, segHighNode, meetsHighAdjSeg;		// y-max vertex
+
+		if ( inSegment.upward ) {
+			segLowVert	= inSegment.vFrom;
+			segHighVert	= inSegment.vTo;
+			segLowNode		= inSegment.rootFrom;
+			segHighNode		= inSegment.rootTo;
+			// was lower point already inserted earlier? => segments meet at their ends
+			meetsLowAdjSeg	= inSegment.sprev.is_inserted;
+			// was higher point already inserted earlier? => segments meet at their ends
+			meetsHighAdjSeg	= inSegment.snext.is_inserted;
+		} else {
+			segLowVert	= inSegment.vTo;
+			segHighVert	= inSegment.vFrom;
+			segLowNode		= inSegment.rootTo;
+			segHighNode		= inSegment.rootFrom;
+			meetsLowAdjSeg	= inSegment.snext.is_inserted;
+			meetsHighAdjSeg	= inSegment.sprev.is_inserted;
+		}
+
+		//	insert higher vertex into QueryStructure
+		if ( !meetsHighAdjSeg ) {
+			// higher vertex not yet inserted => split trapezoid horizontally
+			var tmpNode = this.splitNodeAtPoint( segHighNode, segHighVert, false );
+			// move segLowNode to new (lower) trapezoid, if it was the one which was just split
+			if ( segHighNode == segLowNode )	segLowNode = tmpNode;
+			segHighNode = tmpNode;
+		}
+		var trFirst = segHighNode.trap;		// top-most trapezoid for this segment
+
+		// check for robustness		// TODO: prevent
+		if ( !trFirst.uL && !trFirst.uR ) {
+			console.log("ERR add_segment: missing trFirst.uX: ", trFirst );
+			return;
+		}
+		if ( trFirst.vHigh != segHighVert ) {
+			console.log("ERR add_segment: trFirstHigh != segHigh: ", trFirst );
+			return;
+		}
+
+		//	insert lower vertex into QueryStructure
+		if ( !meetsLowAdjSeg ) {
+			// lower vertex not yet inserted => split trapezoid horizontally
+			segLowNode = this.splitNodeAtPoint( segLowNode, segLowVert, true );
+		}
+		var trLast = segLowNode.trap;			// bottom-most trapezoid for this segment
+
+		//
+		// Thread the segment into the query "tree" from top to bottom.
+		// All the trapezoids which are intersected by inSegment are "split" into two.
+		// For each the SINK-QsNode is converted into an X-Node and
+		//  new sinks for the new partial trapezoids are added.
+		// In fact a real split only happens at the top and/or bottom end of the segment
+		//	since at every y-line seperating two trapezoids is traverses it
+		//	cuts off the "beam" from the y-vertex on one side, so that at that side
+		//	the trapezoid from above can be extended down.
+		//
+
+		var trCurrent = trFirst;
+
+		var trNewLeft, trNewRight, trPrevLeft, trPrevRight;
+
+		var counter = this.trapArray.length + 2;		// just to prevent infinite loop
+		var trNext;
+		while ( trCurrent ) {
+			if ( --counter < 0 ) {
+				console.log( "ERR add_segment: infinite loop", trCurrent, inSegment, this );
+				return;
+			}
+			if ( !trCurrent.dL && !trCurrent.dR ) {
+				// ERROR: no successors, cannot arise if data is correct
+				console.log( "ERR add_segment: missing successors", trCurrent, inSegment, this );
+				return;
+			}
+
+			var qs_trCurrent = trCurrent.sink;
+			// SINK-Node -> X-Node
+			qs_trCurrent.seg = inSegment;
+			qs_trCurrent.trap = null;
+			//
+			// successive trapezoids bordered by the same segments are merged
+			//  by extending the trPrevRight or trPrevLeft down
+			//  and redirecting the parent X-Node to the extended sink
+			// !!! destroys tree structure since several nodes now point to the same SINK-Node !!!
+			// TODO: maybe it's not a problem;
+			//  merging of X-Nodes is no option, since they are used as "rootFrom/rootTo" !
+			//
+			if ( trPrevRight && ( trPrevRight.rseg == trCurrent.rseg ) ) {
+				// console.log( "add_segment: extending right predecessor down!", trPrevRight );
+				trNewLeft = trCurrent;
+				trNewRight = trPrevRight;
+				trNewRight.vLow = trCurrent.vLow;
+				// redirect parent X-Node to extended sink
+				qs_trCurrent.left = new PNLTRI.QsNode( trNewLeft );			// trCurrent -> left SINK-Node
+				qs_trCurrent.right = trPrevRight.sink;						// deforms tree by multiple links to trPrevRight.sink
+			} else if ( trPrevLeft && ( trPrevLeft.lseg == trCurrent.lseg ) ) {
+				// console.log( "add_segment: extending left predecessor down!", trPrevLeft );
+				trNewRight = trCurrent;
+				trNewLeft = trPrevLeft;
+				trNewLeft.vLow = trCurrent.vLow;
+				// redirect parent X-Node to extended sink
+				qs_trCurrent.left = trPrevLeft.sink;						// deforms tree by multiple links to trPrevLeft.sink
+				qs_trCurrent.right = new PNLTRI.QsNode( trNewRight );		// trCurrent -> right SINK-Node
+			} else {
+				trNewLeft = trCurrent;
+				trNewRight = this.cloneTrap(trCurrent);
+				qs_trCurrent.left = new PNLTRI.QsNode( trNewLeft );			// trCurrent -> left SINK-Node
+				qs_trCurrent.right = new PNLTRI.QsNode( trNewRight );		// new clone -> right SINK-Node
+			}
+
+			// handle neighbors above
+			if ( trCurrent.uL && trCurrent.uR )	{
+				continue_chain_from_above();
+			} else {
+				fresh_seg_or_upward_cusp();
+			}
+
+			// handle neighbors below
+			if ( trCurrent.dL && trCurrent.dR ) {
+				trNext = two_trap_below();
+			} else {
+				if ( trCurrent.dL ) {
+					// console.log( "add_segment: only_one_trap_below! (dL)" );
+					trNext = trCurrent.dL;
+				} else {
+					// console.log( "add_segment: only_one_trap_below! (dR)" );
+					trNext = trCurrent.dR;
+				}
+				only_one_trap_below( trNext );
+			}
+
+			if ( trNewLeft.rseg )	trNewLeft.rseg.trLeft = trNewRight;
+			if ( trNewRight.lseg )	trNewRight.lseg.trRight = trNewLeft;
+			trNewLeft.rseg = trNewRight.lseg  = inSegment;
+			inSegment.trLeft = trNewLeft;
+			inSegment.trRight = trNewRight;
+
+			// further loop-step down ?
+			if ( trCurrent.vLow != trLast.vLow ) {
+				trPrevLeft = trNewLeft;
+				trPrevRight = trNewRight;
+
+				trCurrent = trNext;
+			} else {
+				trCurrent = null;
+			}
+		}	// end while
+
+		inSegment.is_inserted = true;
+		// console.log( "add_segment: ###### DONE ######" );
+	},
+
+	// Assigns a depth to all trapezoids;
+	//	0: outside, 1: main polygon, 2: holes, 3:polygons in holes, ...
+	// Checks segment orientation and marks those polygon chains for reversal
+	//	where the polygon inside lies to their right (contour in CW, holes in CCW)
+	assignDepths: function ( inPolyData ) {
+		var thisDepth = [ this.trapArray[0] ];
+		var nextDepth = [];
+
+		var thisTrap, borderSeg, curDepth = 0;
+		do {
+			// rseg should exactely go upward on trapezoids inside the polygon (odd depth)
+			var expectedRsegUpward = ( ( curDepth % 2 ) == 1 );
+			while ( thisTrap = thisDepth.pop() ) {
+				if ( thisTrap.depth != -1 )	continue;
+				thisTrap.depth = curDepth;
+				//
+				if ( thisTrap.uL )	thisDepth.push( thisTrap.uL );
+				if ( thisTrap.uR )	thisDepth.push( thisTrap.uR );
+				if ( thisTrap.dL )	thisDepth.push( thisTrap.dL );
+				if ( thisTrap.dR )	thisDepth.push( thisTrap.dR );
+				//
+				if ( ( borderSeg = thisTrap.lseg ) && ( borderSeg.trLeft.depth == -1 ) )
+					nextDepth.push( borderSeg.trLeft );
+				if ( borderSeg = thisTrap.rseg ) {
+					if ( borderSeg.trRight.depth == -1 )
+						nextDepth.push( borderSeg.trRight );
+					if ( borderSeg.upward != expectedRsegUpward )
+						inPolyData.set_PolyLeft_wrong( borderSeg.chainId );
+				}
+			}
+			thisDepth = nextDepth; nextDepth = [];
+			curDepth++;
+		} while ( thisDepth.length > 0 );
+	},
+
+	// creates the visibility map:
+	//	for each vertex the list of all vertices in CW order which are directly
+	//	visible through neighboring trapezoids and thus can be connected by a diagonal
+
+	create_visibility_map: function ( inPolygonData ) {
+		// positional slots for neighboring trapezoid-diagonals
+		var DIAG_UL = 0, DIAG_UM = 1, DIAG_ULR = 2, DIAG_UR = 3;
+		var DIAG_DR = 4, DIAG_DM = 5, DIAG_DLR = 6, DIAG_DL = 7;
+
+		var i, j;
+		var nbVertices = inPolygonData.nbVertices();
+
+		// initialize arrays for neighboring trapezoid-diagonals and vertices
+		var myVisibleDiagonals	= new Array(nbVertices);
+		for ( i = 0; i < nbVertices; i++ ) {
+			myVisibleDiagonals[i] = new Array(DIAG_DL+1);
+		}
+		// create the list of neighboring trapezoid-diagonals
+		//	put into their positional slots
+		var myExternalNeighbors = new Array(nbVertices);
+		for ( i = 0, j = this.trapArray.length; i < j; i++ ) {
+			var curTrap = this.trapArray[i];
+			var highPos = curTrap.uL ?
+						( curTrap.uR ? DIAG_DM : DIAG_DL ) :
+						( curTrap.uR ? DIAG_DR : DIAG_DLR );
+			var lowPos = curTrap.dL ?
+						( curTrap.dR ? DIAG_UM : DIAG_UL ) :
+						( curTrap.dR ? DIAG_UR : DIAG_ULR );
+
+			if ( ( curTrap.depth % 2 ) == 1 ) {		// inside ?
+				if ( ( highPos == DIAG_DM ) || ( lowPos == DIAG_UM ) ||
+					 ( ( highPos == DIAG_DL ) && ( lowPos == DIAG_UR ) ) ||
+					 ( ( highPos == DIAG_DR ) && ( lowPos == DIAG_UL ) ) ) {
+					var lhDiag = inPolygonData.appendDiagonalsEntry( {
+									vFrom: curTrap.vLow, vTo: curTrap.vHigh,
+									mprev: null, mnext: null, marked: false } );
+					var hlDiag = inPolygonData.appendDiagonalsEntry( {
+									vFrom: curTrap.vHigh, vTo: curTrap.vLow, revDiag: lhDiag,
+									mprev: null, mnext: null, marked: false } );
+					lhDiag.revDiag = hlDiag;
+					myVisibleDiagonals[ curTrap.vLow.id][ lowPos] = lhDiag;
+					myVisibleDiagonals[curTrap.vHigh.id][highPos] = hlDiag;
+				}
+			} else {		// outside, hole
+				if ( curTrap.vHigh.id != null )	myExternalNeighbors[curTrap.vHigh.id] = highPos;
+				if ( curTrap.vLow.id  != null )	myExternalNeighbors[ curTrap.vLow.id] = lowPos;
+			}
+		}
+		// create the list of outgoing diagonals in the right order (CW)
+		//	from the ordered list of neighboring trapezoid-diagonals
+		//	- starting from an external one
+		// and connect those incoming to
+		var curDiag, curDiags, firstElem, fromVertex, lastIncoming;
+		for ( i = 0; i < nbVertices; i++ ) {
+			curDiags  = myVisibleDiagonals[i];
+			firstElem = myExternalNeighbors[i];
+			if ( firstElem == null )	continue;		// eg. skipped vertices (zero length, co-linear
+			j = firstElem;
+			lastIncoming = null;
+			do {
+				if ( j++ > DIAG_DL )			j = DIAG_UL;	// circular positional list
+				if ( curDiag = curDiags[j] ) {
+					if ( lastIncoming ) {
+						curDiag.mprev = lastIncoming;
+						lastIncoming.mnext = curDiag;
+					} else {
+						fromVertex = curDiag.vFrom;
+						fromVertex.firstOutDiag = curDiag;
+					}
+					lastIncoming = curDiag.revDiag;
+				}
+			} while ( j != firstElem );
+			if ( lastIncoming )		fromVertex.lastInDiag = lastIncoming;
+		}
+	},
+
+
+};
+
+
+/*==============================================================================
+ *
+ *============================================================================*/
+
+/** @constructor */
+PNLTRI.Trapezoider = function ( inPolygonData ) {
+
+	this.polyData		= inPolygonData;
+	this.queryStructure	= new PNLTRI.QueryStructure( this.polyData );
+
+};
+
+PNLTRI.Trapezoider.prototype = {
+
+	constructor: PNLTRI.Trapezoider,
+
+
+	/*
+	 * Mathematics helper methods
+	 */
+
+	optimise_randomlist: function ( inOutSegListArray ) {
+		// makes sure that the first N segments are one from each of the N polygon chains
+		var mainIdx = 0;
+		var helpIdx = this.polyData.nbPolyChains();
+		if ( helpIdx == 1 )		return;
+		var chainMarker = new Array(helpIdx);
+		var oldSegListArray = inOutSegListArray.concat();
+		for (var i=0; i<oldSegListArray.length; i++) {
+			var chainId = oldSegListArray[i].chainId;
+			if ( chainMarker[chainId] ) {
+				inOutSegListArray[helpIdx++] = oldSegListArray[i];
+			} else {
+				inOutSegListArray[mainIdx++] = oldSegListArray[i];
+				chainMarker[chainId] = true;
+			}
+		}
+	},
+
+
+	/*
+	 * main methods
+	 */
+
+	// Creates the trapezoidation of the polygon
+	//  and assigns a depth to all trapezoids (odd: inside, even: outside).
+
+	trapezoide_polygon: function () {							// <<<< public
+		var randSegListArray = this.polyData.getSegments().concat();
+//		console.log( "Polygon Chains: ", dumpSegmentList( randSegListArray ) );
+		PNLTRI.Math.array_shuffle( randSegListArray );
+		this.optimise_randomlist( randSegListArray );
+//		console.log( "Random Segment Sequence: ", dumpRandomSequence( randSegListArray ) );
+
+		var nbSegs = randSegListArray.length;
+		var myQs = this.queryStructure;
+
+		var current = 0, logstar = nbSegs;
+		while ( current < nbSegs ) {
+			// The CENTRAL mechanism for the near-linear performance:
+			//	stratefies the loop through all segments into log* parts
+			//	and computes new root-Nodes for the remaining segments in each
+			//	partition.
+			logstar = Math.log(logstar)/Math.LN2;		// == log2(logstar)
+			var partEnd = ( logstar > 1 ) ? Math.floor( nbSegs / logstar ) : nbSegs;
+
+			// Core: adds next partition of the segments
+			for (; current < partEnd; current++ ) { myQs.add_segment( randSegListArray[current] ) }
+//			console.log( nbSegs, current );
+
+			// To speed up the segment insertion into the trapezoidation
+			//	the endponts of those segments not yet inserted
+			//	are repeatedly pre-located,
+			// thus their final location-query can start at the top of the
+			//	appropriate sub-tree instead of the root of the whole
+			//	query structure.
+			//
+			for (var i = current; i < nbSegs; i++) { this.queryStructure.segNodes( randSegListArray[i] ) }
+		}
+
+		myQs.assignDepths( this.polyData );
+		// cleanup to support garbage collection
+		for (i = 0; i < nbSegs; i++) { randSegListArray[i].trLeft = randSegListArray[i].trRight = null; }
+	},
+
+	// Creates a visibility map:
+	//	for each vertex the list of all vertices in CW order which are directly
+	//	visible through neighboring trapezoids and thus can be connected by a diagonal
+
+	create_visibility_map: function () {
+		return	this.queryStructure.create_visibility_map( this.polyData );
+	},
+
+};
+
+
+// File:src/math/pnltri/MonoSplitter.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ *
+ *	Algorithm to split a polygon into uni-y-monotone sub-polygons
+ *
+ *	1) creates a trapezoidation of the main polygon according to Seidel's
+ *	   algorithm [Sei91]
+ *	2) uses diagonals of the trapezoids as additional segments
+ *		to split the main polygon into uni-y-monotone sub-polygons
+ */
+
+/** @constructor */
+PNLTRI.MonoSplitter = function ( inPolygonData ) {
+
+	this.polyData = inPolygonData;
+
+	this.trapezoider = null;
+
+};
+
+
+PNLTRI.MonoSplitter.prototype = {
+
+	constructor: PNLTRI.MonoSplitter,
+
+
+	monotonate_trapezoids: function () {					// <<<<<<<<<< public
+		// Trapezoidation
+		this.trapezoider = new PNLTRI.Trapezoider( this.polyData );
+		//	=> one triangular trapezoid which lies inside the polygon
+		this.trapezoider.trapezoide_polygon();
+
+		// create segments for diagonals
+		this.trapezoider.create_visibility_map();
+		// create mono chains by inserting diagonals
+		this.polyData.create_mono_chains();
+
+		// create UNIQUE monotone sub-polygons
+		this.polyData.unique_monotone_chains_max();
+	},
+
+};
+
+
+// File:src/math/pnltri/MonoTriangulator.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ *
+ *	Algorithm to triangulate uni-y-monotone polygons [FoM84]
+ *
+ *	expects list of doubly linked monoChains, with Y-max as first vertex
+ */
+
+
+/** @constructor */
+PNLTRI.MonoTriangulator = function ( inPolygonData ) {
+
+	this.polyData	= inPolygonData;
+
+};
+
+
+PNLTRI.MonoTriangulator.prototype = {
+
+	constructor: PNLTRI.MonoTriangulator,
+
+
+	// Pass each uni-y-monotone polygon with start at Y-max for greedy triangulation.
+
+	triangulate_all_polygons: function () {					// <<<<<<<<<< public
+		var	normedMonoChains = this.polyData.getMonoSubPolys();
+		this.polyData.clearTriangles();
+		for ( var i=0; i<normedMonoChains.length; i++ ) {
+			// loop through uni-y-monotone chains
+			// => monoPosmin is next to monoPosmax (left or right)
+			var monoPosmax = normedMonoChains[i];
+			var prevMono = monoPosmax.mprev;
+			var nextMono = monoPosmax.mnext;
+
+			if ( nextMono.mnext == prevMono ) {		// already a triangle
+				this.polyData.addTriangle( monoPosmax.vFrom, nextMono.vFrom, prevMono.vFrom );
+			} else {								// triangulate the polygon
+				this.triangulate_monotone_polygon( monoPosmax );
+			}
+		}
+	},
+
+	//	algorithm to triangulate an uni-y-monotone polygon in O(n) time.[FoM84]
+
+	triangulate_monotone_polygon: function ( monoPosmax ) {			// private
+		var scope = this;
+
+		function error_cleanup() {
+			// Error in algorithm OR polygon is not uni-y-monotone
+			console.log( "ERR uni-y-monotone: only concave angles left", vertBackLog );
+			// push all "wrong" triangles => loop ends
+			while (vertBackLogIdx > 1) {
+				vertBackLogIdx--;
+				scope.polyData.addTriangle(	vertBackLog[vertBackLogIdx-1],
+											vertBackLog[vertBackLogIdx],
+											vertBackLog[vertBackLogIdx+1] );
+			}
+		}
+
+		//
+		// Decisive for this algorithm to work correctly is to make sure
+		//  the polygon stays uni-y-monotone when cutting off ears, i.e.
+		//  to make sure the top-most and bottom-most vertices are removed last
+		// Usually this is done by handling the LHS-case ("LeftHandSide is a single segment")
+		//	and the RHS-case ("RightHandSide segment is a single segment")
+		//	differently by starting at the bottom for LHS and at the top for RHS.
+		// This is not necessary. It can be seen easily, that starting
+		//	from the vertex next to top handles both cases correctly.
+		//
+
+		var frontMono = monoPosmax.mnext;		// == LHS: YminPoint; RHS: YmaxPoint.mnext
+		var endVert = monoPosmax.vFrom;
+
+		var vertBackLog = [ frontMono.vFrom ];
+		var vertBackLogIdx = 0;
+
+		frontMono = frontMono.mnext;
+		var frontVert = frontMono.vFrom;
+
+		// check for robustness		// TODO
+		if (frontVert == endVert)	return;		// Error: only 2 vertices
+
+		while ( (frontVert != endVert) || (vertBackLogIdx > 1) ) {
+			if ( vertBackLogIdx > 0 ) {
+				// vertBackLog is not empty
+				var insideAngleCCW = PNLTRI.Math.ptsCrossProd( vertBackLog[vertBackLogIdx], frontVert, vertBackLog[vertBackLogIdx-1] );
+				if ( Math.abs(insideAngleCCW) <= PNLTRI.Math.EPSILON_P ) {
+					// co-linear
+					if ( (frontVert == endVert) ||		// all remaining triangles are co-linear (180 degree)
+						 ( PNLTRI.Math.compare_pts_yx( vertBackLog[vertBackLogIdx], frontVert ) ==				// co-linear-reversal
+						   PNLTRI.Math.compare_pts_yx( vertBackLog[vertBackLogIdx], vertBackLog[vertBackLogIdx-1] ) ) ) {
+						insideAngleCCW = 1;		// => create triangle
+					}
+				}
+				if ( insideAngleCCW > 0 ) {
+					// convex corner: cut if off
+					this.polyData.addTriangle( vertBackLog[vertBackLogIdx-1], vertBackLog[vertBackLogIdx], frontVert );
+					vertBackLogIdx--;
+				} else {
+					// non-convex: add frontVert to the vertBackLog
+					vertBackLog[++vertBackLogIdx] = frontVert;
+					if (frontVert == endVert)	error_cleanup();	// should never happen !!
+					else {
+						frontMono = frontMono.mnext;
+						frontVert = frontMono.vFrom;
+					}
+				}
+			} else {
+				// vertBackLog contains only start vertex:
+				//	add frontVert to the vertBackLog and advance frontVert
+				vertBackLog[++vertBackLogIdx] = frontVert;
+				frontMono = frontMono.mnext;
+				frontVert = frontMono.vFrom;
+			}
+		}
+		// reached the last vertex. Add in the triangle formed
+		this.polyData.addTriangle( vertBackLog[vertBackLogIdx - 1], vertBackLog[vertBackLogIdx], frontVert );
+	},
+
+};
+
+
+// File:src/math/pnltri/Triangulator.js
+
+/**
+ * @author jahting / http://www.ameco.tv/
+ */
+
+/*******************************************************************************
+ *
+ *	Triangulator for Simple Polygons with Holes
+ *
+ *  polygon with holes:
+ *	- one closed contour polygon chain
+ *  - zero or more closed hole polygon chains
+ *
+ *	polygon chain (closed):
+ *	- Array of vertex Objects with attributes "x" and "y"
+ *		- representing the sequence of line segments
+ *		- closing line segment (last->first vertex) is implied
+ *		- line segments are non-zero length and non-crossing
+ *
+ *	"global vertex index":
+ *	- vertex number resulting from concatenation all polygon chains (starts with 0)
+ *
+ *
+ *	Parameters (will not be changed):
+ *		inPolygonChains:
+ *		- Array of polygon chains
+ *
+ *	Results (are a fresh copy):
+ *		triangulate_polygon:
+ *		- Array of Triangles ( Array of 3 "global vertex index" values )
+ *
+ ******************************************************************************/
+
+/** @constructor */
+PNLTRI.Triangulator = function () {
+
+	this.lastPolyData = null;		// for Debug purposes only
+
+};
+
+
+PNLTRI.Triangulator.prototype = {
+
+	constructor: PNLTRI.Triangulator,
+
+
+	clear_lastData: function () {	// save memory after Debug
+		this.lastPolyData = null;
+	},
+
+	// for the polygon data AFTER triangulation
+	//	returns an Array of flags, one flag for each polygon chain:
+	//		lies the inside of the polygon to the left?
+	//		"true" implies CCW for contours and CW for holes
+	get_PolyLeftArr: function () {
+		if ( this.lastPolyData )	return this.lastPolyData.get_PolyLeftArr();
+		return	null;
+	},
+
+
+	triangulate_polygon: function ( inPolygonChains, inForceTrapezoidation ) {
+
+		// collected conditions for selecting EarClipTriangulator over Seidel's algorithm
+		function is_basic_polygon() {
+			if (inForceTrapezoidation)	return	false;
+			return	( myPolygonData.nbPolyChains() == 1 );
+		}
+
+
+		this.clear_lastData();
+		if ( ( !inPolygonChains ) || ( inPolygonChains.length == 0 ) )		return	[];
+		//
+		// initializes general polygon data structure
+		//
+		var myPolygonData = new PNLTRI.PolygonData( inPolygonChains );
+		//
+		var basicPolygon = is_basic_polygon();
+		if ( basicPolygon ) {
+			//
+			// triangulates single polygon without holes
+			//
+			var	myTriangulator = new PNLTRI.EarClipTriangulator( myPolygonData );
+			basicPolygon = myTriangulator.triangulate_polygon_no_holes();
+		}
+		if ( !basicPolygon ) {
+			//
+			// splits polygon into uni-y-monotone sub-polygons
+			//
+			var	myMonoSplitter = new PNLTRI.MonoSplitter( myPolygonData );
+			myMonoSplitter.monotonate_trapezoids();
+			//
+			// triangulates all uni-y-monotone sub-polygons
+			//
+			var	myTriangulator = new PNLTRI.MonoTriangulator( myPolygonData );
+			myTriangulator.triangulate_all_polygons();
+		}
+		//
+		this.lastPolyData = myPolygonData;
+		return	myPolygonData.getTriangles();	// copy of triangle list
+	}
+
+
+};
+
 
