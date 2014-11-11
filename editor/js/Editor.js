@@ -1,3 +1,7 @@
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
 var Editor = function () {
 
 	var SIGNALS = signals;
@@ -18,6 +22,9 @@ var Editor = function () {
 
 		// notifications
 
+		savingStarted: new SIGNALS.Signal(),
+		savingFinished: new SIGNALS.Signal(),
+
 		themeChanged: new SIGNALS.Signal(),
 
 		transformModeChanged: new SIGNALS.Signal(),
@@ -32,6 +39,8 @@ var Editor = function () {
 		geometryChanged: new SIGNALS.Signal(),
 
 		objectSelected: new SIGNALS.Signal(),
+		objectFocused: new SIGNALS.Signal(),
+
 		objectAdded: new SIGNALS.Signal(),
 		objectChanged: new SIGNALS.Signal(),
 		objectRemoved: new SIGNALS.Signal(),
@@ -48,23 +57,24 @@ var Editor = function () {
 		showGridChanged: new SIGNALS.Signal()
 
 	};
-	
+
 	this.config = new Config();
 	this.storage = new Storage();
 	this.loader = new Loader( this );
 
-	this.camera = new THREE.PerspectiveCamera( 50, 1, 1, 5000 );
+	this.camera = new THREE.PerspectiveCamera( 50, 1, 0.1, 100000 );
+	this.camera.name = 'Camera';
+
 	this.scene = new THREE.Scene();
 	this.scene.name = 'Scene';
-	
+
 	this.sceneHelpers = new THREE.Scene();
 
 	this.object = {};
 	this.geometries = {};
 	this.materials = {};
 	this.textures = {};
-	
-	this.scripts = {};
+	// this.scripts = {};
 
 	this.selected = null;
 	this.helpers = {};
@@ -82,11 +92,11 @@ Editor.prototype = {
 	},
 
 	showDialog: function ( value ) {
-	
+
 		this.signals.showDialog.dispatch( value );
-	
+
 	},
-	
+
 	//
 
 	setScene: function ( scene ) {
@@ -283,35 +293,33 @@ Editor.prototype = {
 
 	select: function ( object ) {
 
-		this.selected = object;
+		if ( this.selected === object ) return;
+
+		var uuid = null;
 
 		if ( object !== null ) {
 
-			this.config.setKey( 'selected', object.uuid );
-
-		} else {
-
-			this.config.setKey( 'selected', null );
+			uuid = object.uuid;
 
 		}
 
+		this.selected = object;
+
+		this.config.setKey( 'selected', uuid );
 		this.signals.objectSelected.dispatch( object );
 
 	},
 
 	selectById: function ( id ) {
 
-		var scope = this;
+		if ( id === this.camera.id ) {
 
-		this.scene.traverse( function ( child ) {
+			this.select( this.camera );
+			return;
 
-			if ( child.id === id ) {
+		}
 
-				scope.select( child );
-
-			}
-
-		} );
+		this.select( this.scene.getObjectById( id, true ) );
 
 	},
 
@@ -334,6 +342,18 @@ Editor.prototype = {
 	deselect: function () {
 
 		this.select( null );
+
+	},
+
+	focus: function ( object ) {
+
+		this.signals.objectFocused.dispatch( object );
+
+	},
+
+	focusById: function ( id ) {
+
+		this.focus( this.scene.getObjectById( id, true ) );
 
 	}
 
