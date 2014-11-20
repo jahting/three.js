@@ -42,11 +42,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.domElement = _canvas;
 	this.context = null;
-	this.devicePixelRatio = parameters.devicePixelRatio !== undefined
-				 ? parameters.devicePixelRatio
-				 : self.devicePixelRatio !== undefined
-					 ? self.devicePixelRatio
-					 : 1;
+	this.devicePixelRatio = self.devicePixelRatio !== undefined ? self.devicePixelRatio : 1;
 
 	// clearing
 
@@ -290,6 +286,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_currentMaterialId = - 1;
 
 		_lightsNeedUpdate = true;
+
+		for ( var i = 0; i < _enabledAttributes.length; i ++ ) {
+
+			_enabledAttributes[ i ] = 0;
+
+		}
 
 	};
 
@@ -2770,20 +2772,92 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			// render particles
 
-			if ( updateBuffers ) {
+			var mode = _gl.POINTS;
 
-				setupVertexAttributes( material, program, geometry, 0 );
+			var index = geometry.attributes.index;
+
+			if ( index ) {
+
+				// indexed points
+
+				var type, size;
+
+				if ( index.array instanceof Uint32Array && extensions.get( 'OES_element_index_uint' ) ) {
+
+					type = _gl.UNSIGNED_INT;
+					size = 4;
+
+				} else {
+
+					type = _gl.UNSIGNED_SHORT;
+					size = 2;
+
+				}
+
+				var offsets = geometry.offsets;
+
+				if ( offsets.length === 0 ) {
+
+					if ( updateBuffers ) {
+
+						setupVertexAttributes( material, program, geometry, 0 );
+						_gl.bindBuffer( _gl.ELEMENT_ARRAY_BUFFER, index.buffer );
+
+					}
+
+					_gl.drawElements( mode, index.array.length, type, 0);
+
+					_this.info.render.calls ++;
+					_this.info.render.points += index.array.length;
+
+				} else {
+
+					// if there is more than 1 chunk
+					// must set attribute pointers to use new offsets for each chunk
+					// even if geometry and materials didn't change
+
+					if ( offsets.length > 1 ) updateBuffers = true;
+
+					for ( var i = 0, il = offsets.length; i < il; i ++ ) {
+
+						var startIndex = offsets[ i ].index;
+
+						if ( updateBuffers ) {
+
+							setupVertexAttributes( material, program, geometry, startIndex );
+							_gl.bindBuffer( _gl.ELEMENT_ARRAY_BUFFER, index.buffer );
+
+						}
+
+						// render indexed points
+
+						_gl.drawElements( mode, offsets[ i ].count, type, offsets[ i ].start * size );
+
+						_this.info.render.calls ++;
+						_this.info.render.points += offsets[ i ].count;
+
+					}
+
+				}
+
+			} else {
+
+				// non-indexed points
+
+				if ( updateBuffers ) {
+
+					setupVertexAttributes( material, program, geometry, 0 );
+
+				}
+
+				var position = geometry.attributes.position;
+
+				_gl.drawArrays( mode, 0, position.array.length / 3 );
+
+				_this.info.render.calls ++;
+				_this.info.render.points += position.array.length / 3;
 
 			}
-
-			var position = geometry.attributes.position;
-
-			// render particles
-
-			_gl.drawArrays( _gl.POINTS, 0, position.array.length / 3 );
-
-			_this.info.render.calls ++;
-			_this.info.render.points += position.array.length / 3;
 
 		} else if ( object instanceof THREE.Line ) {
 
@@ -4462,6 +4536,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 			if ( material instanceof THREE.MeshPhongMaterial ||
 				 material instanceof THREE.MeshLambertMaterial ||
+				 material instanceof THREE.MeshBasicMaterial ||
 				 material instanceof THREE.ShaderMaterial ||
 				 material.skinning ) {
 
@@ -4716,7 +4791,9 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		uniforms.refractionRatio.value = material.refractionRatio;
 		uniforms.combine.value = material.combine;
-		uniforms.useRefract.value = material.envMap && material.envMap.mapping instanceof THREE.CubeRefractionMapping;
+		uniforms.useRefract.value = material.envMap && (
+			material.envMap.mapping === THREE.CubeRefractionMapping ||
+			material.envMap.mapping === THREE.EquirectangularRefractionMapping );
 
 	}
 
@@ -5753,8 +5830,20 @@ THREE.WebGLRenderer = function ( parameters ) {
 			_gl.texParameteri( textureType, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE );
 			_gl.texParameteri( textureType, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE );
 
+			if ( texture.wrapS !== THREE.ClampToEdgeWrapping || texture.wrapT !== THREE.ClampToEdgeWrapping ) {
+
+				console.warn( 'THREE.WebGLRenderer: Texture is not power of two. Texture.wrapS and Texture.wrapT is set to THREE.ClampToEdgeWrapping. ( ' + texture.sourceFile + ' )' );
+
+			}
+
 			_gl.texParameteri( textureType, _gl.TEXTURE_MAG_FILTER, filterFallback( texture.magFilter ) );
 			_gl.texParameteri( textureType, _gl.TEXTURE_MIN_FILTER, filterFallback( texture.minFilter ) );
+
+			if ( texture.minFilter !== THREE.NearestFilter && texture.minFilter !== THREE.LinearFilter ) {
+
+				console.warn( 'THREE.WebGLRenderer: Texture is not power of two. Texture.minFilter is set to THREE.LinearFilter or THREE.NearestFilter. ( ' + texture.sourceFile + ' )' );			
+
+			}
 
 		}
 
